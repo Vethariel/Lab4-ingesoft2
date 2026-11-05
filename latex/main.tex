@@ -3,11 +3,25 @@
 \usepackage{fontspec}
 \usepackage[spanish,es-noshorthands]{babel}
 \usepackage[margin=2.5cm]{geometry}
+\usepackage{xurl}
 \usepackage{hyperref}
 \usepackage{array}
 \usepackage{graphicx}
+\usepackage{listings}
 
 \setmainfont{Latin Modern Roman}
+\setlength{\emergencystretch}{2em}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt
+}
 
 % Captura de Postman: usa capturas/#1 si existe; si no, deja el recuadro para tomarla
 \graphicspath{{capturas/}}
@@ -128,6 +142,97 @@ El 429 no se pidió: apareció al enviar la petición de (a). httpbin.org admite
 \captura{ej0-d-429.png}{Figura 9. El 429 que devolvió httpbin.org al superar el límite de peticiones.}
 
 \section*{Ejercicio 1. CRUD completo con JSONPlaceholder}
+
+El environment define \texttt{baseUrl = https://jsonplaceholder.typicode.com}, \texttt{postId = 1} y \texttt{userId = 1}. Las peticiones usan esas variables en las rutas y en los cuerpos; la tabla muestra las URLs ya resueltas. JSONPlaceholder acepta escrituras, pero no las guarda: responde lo que respondería un servidor real.
+
+\subsection*{(a) Métodos, códigos y propiedades}
+
+Un método es \emph{seguro} si no cambia nada en el servidor, e \emph{idempotente} si enviarlo una vez o varias deja el servidor en el mismo estado. Todo método seguro es idempotente; al revés no.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.6cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{1.1cm}>{\raggedright\arraybackslash}p{1.3cm}>{\raggedright\arraybackslash}p{2cm}>{\raggedright\arraybackslash}p{4.4cm}@{}}
+\hline
+Método & Endpoint & Código & ¿Seguro? & ¿Idempotente? & Qué hace \\
+\hline
+GET & \texttt{/users} & 200 & Sí & Sí & Lista los 10 usuarios. \\
+GET & \texttt{/users/1/posts} & 200 & Sí & Sí & Lista los 10 posts del usuario 1. \\
+GET & \texttt{/posts?userId=1} & 200 & Sí & Sí & Filtra los posts por \texttt{userId}; devuelve los mismos 10. \\
+POST & \texttt{/posts} & 201 & No & No & Crea un post. Responde con \texttt{id: 101} y \texttt{Location: /posts/101}. \\
+PUT & \texttt{/posts/1} & 200 & No & Sí & Reemplaza el post 1 entero por el cuerpo enviado. \\
+PATCH & \texttt{/posts/1} & 200 & No & No\textsuperscript{*} & Cambia solo los campos enviados y conserva los demás. \\
+DELETE & \texttt{/posts/1} & 200 & No & Sí & Borra el post 1. Responde \texttt{\{\}}. \\
+GET & \texttt{/posts/9999} & 404 & Sí & Sí & Busca un post que no existe. Responde \texttt{\{\}}. \\
+\hline
+\end{tabular}
+\end{center}
+
+{\small \textsuperscript{*}HTTP no garantiza que \texttt{PATCH} sea idempotente. Lo es cuando fija valores, como aquí (\texttt{title = "Solo cambia el titulo"}), y deja de serlo con operaciones relativas, como ``sumar 1 a las vistas''.}
+
+\texttt{DELETE} es idempotente aunque la segunda vez responda distinto (en una API real, 404): lo que cuenta es el estado del servidor, y después de uno o de diez \texttt{DELETE} el post sigue sin existir. Una API real respondería \texttt{204 No Content} en lugar de \texttt{200} con un cuerpo vacío.
+
+\captura{ej1-a-users.png}{Figura 10. \texttt{GET /users}.}
+
+\captura{ej1-a-users-posts.png}{Figura 11. \texttt{GET /users/1/posts}.}
+
+\captura{ej1-a-posts-userid.png}{Figura 12. \texttt{GET /posts?userId=1}.}
+
+\captura{ej1-a-post.png}{Figura 13. \texttt{POST /posts}: el cuerpo de la respuesta.}
+
+\captura{ej1-a-post-location.png}{Figura 14. \texttt{POST /posts}: el header \texttt{Location} de la respuesta.}
+
+\captura{ej1-a-put.png}{Figura 15. \texttt{PUT /posts/1}.}
+
+\captura{ej1-a-patch.png}{Figura 16. \texttt{PATCH /posts/1}.}
+
+\captura{ej1-a-delete.png}{Figura 17. \texttt{DELETE /posts/1}.}
+
+\captura{ej1-a-9999.png}{Figura 18. \texttt{GET /posts/9999}.}
+
+\subsection*{(b) Ruta anidada o parámetro de consulta}
+
+Las dos peticiones devuelven los mismos 10 posts, pero dicen cosas distintas. La ruta \texttt{/users/1/posts} dice que los posts \emph{pertenecen} al usuario 1: es una relación de pertenencia. El parámetro \texttt{/posts?userId=1} dice que de la colección de todos los posts se quieren solo algunos: es un filtro.
+
+El criterio general es que la ruta identifica un recurso y la consulta filtra una colección. Conviene la ruta anidada cuando el hijo no tiene sentido sin el padre y casi siempre se consulta desde él, como las líneas de un pedido (\texttt{/pedidos/7/lineas}); conviene un nivel de anidamiento, dos como máximo. Conviene el parámetro cuando el criterio es opcional o se combina con otros: \url{/posts?userId=1&q=lab&page=2} se arma sin crear rutas nuevas, mientras que con rutas habría que inventar una por cada combinación.
+
+\subsection*{(c) Crear y luego consultar}
+
+El \texttt{POST /posts} respondió \texttt{201 Created}, un cuerpo con \texttt{id: 101} y el header \texttt{Location:} \url{https://jsonplaceholder.typicode.com/posts/101}. El \texttt{GET /posts/101} siguiente respondió \texttt{404 Not Found}.
+
+JSONPlaceholder solo tiene 100 posts y no guarda las escrituras: calcula el \texttt{id} que tendría el post y arma la respuesta que daría un servidor real, pero no lo almacena. Por eso la URL del \texttt{Location} lleva a un recurso que no existe. Una prueba guarda el \texttt{id} en la variable \texttt{nuevoId}, y la petición siguiente consulta \texttt{\{\{baseUrl\}\}/posts/\{\{nuevoId\}\}}, sin escribir el 101 a mano.
+
+En una API real, el \texttt{POST} debe responder \texttt{201 Created} con el header \texttt{Location} apuntando al recurso nuevo, y el \texttt{GET} a esa URL debe devolverlo con \texttt{200}. JSONPlaceholder imita bien la respuesta; lo que falta es el almacenamiento.
+
+\captura{ej1-c-get-nuevo.png}{Figura 19. \texttt{GET /posts/\{\{nuevoId\}\}} después del \texttt{POST}: 404.}
+
+\subsection*{(d) PUT y PATCH}
+
+El \texttt{PUT /posts/1} envía el recurso completo:
+
+\begin{lstlisting}
+{ "id": 1, "title": "Titulo nuevo", "body": "Cuerpo nuevo", "userId": 1 }
+\end{lstlisting}
+
+El \texttt{PATCH /posts/1} envía solo lo que cambia:
+
+\begin{lstlisting}
+{ "title": "Solo cambia el titulo" }
+\end{lstlisting}
+
+La respuesta del \texttt{PATCH} trae el título nuevo y el \texttt{body} original del post 1 (\texttt{"quia et suscipit\ldots"}), porque los campos que no se enviaron se conservan.
+
+\texttt{PUT} significa ``deja el recurso exactamente así''. Si se omite \texttt{title}, el post queda sin título: JSONPlaceholder lo muestra, porque su respuesta al \texttt{PUT} sin \texttt{title} trae solo \texttt{id}, \texttt{body} y \texttt{userId}. En una API real pasaría una de dos cosas: si \texttt{title} es obligatorio, el servidor rechaza la petición con \texttt{400 Bad Request}; si es opcional, lo borra o lo deja en \texttt{null}. En ningún caso conserva el título anterior: para cambiar un solo campo se usa \texttt{PATCH}.
+
+\captura{ej1-d-put-sin-title.png}{Figura 20. \texttt{PUT /posts/1} sin \texttt{title}: la respuesta no lo trae.}
+
+\subsection*{(e) Pruebas automáticas}
+
+Las diez peticiones de la carpeta \texttt{Ejercicio 1} tienen pruebas en \emph{Scripts → Post-response}. Todas verifican el código de estado; además, cada una revisa lo propio de su método: que los filtros solo traigan posts del usuario 1, que el \texttt{POST} incluya \texttt{Location}, que el \texttt{PATCH} conserve el \texttt{body} y que el \texttt{PUT} sin \texttt{title} lo pierda. El archivo completo es \texttt{postman/scripts-ejercicio1.js}. Las de \texttt{GET /users} son estas:
+
+\lstinputlisting[firstline=4,lastline=10]{../postman/scripts-ejercicio1.js}
+
+El Collection Runner ejecutó la carpeta completa, en orden, con el environment \texttt{Lab4-00}: las 19 pruebas pasaron, sin errores, en 2,8 segundos. El orden importa: el \texttt{POST} va antes del \texttt{GET /posts/\{\{nuevoId\}\}} porque es el que define \texttt{nuevoId}.
+
+\captura{ej1-e-runner.png}{Figura 21. Resultado del Collection Runner sobre la carpeta \texttt{Ejercicio 1}.}
 
 \section*{Ejercicio 2. Un cliente REST en Java}
 

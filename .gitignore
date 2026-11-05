@@ -20,6 +20,7 @@ target/
 
 # Enunciado del laboratorio: se queda en local
 /Laboratorio4_REST_APIs.pdf
+/enunciado.txt
 
 # PDFs. El único que entra al repositorio es el informe compilado.
 *.pdf
