@@ -360,6 +360,154 @@ View & La \texttt{Activity}, el \texttt{Fragment} o la pantalla de Compose: un c
 
 \section*{Ejercicio 3. Los seis protocolos en la práctica}
 
+Las peticiones HTTP están en la carpeta \texttt{Ejercicio 3} de la colección \texttt{Lab4-00}, con pruebas en \emph{Scripts → Post-response}. Las pruebas están en \texttt{postman/scripts-ejercicio3.js}. La conexión WebSocket está en otra colección, \texttt{Lab4-00 WebSocket}, porque Postman guarda las peticiones WebSocket en un tipo de colección distinto al de las HTTP.
+
+\subsection*{(a) REST y GraphQL}
+
+La URL REST de la guía (\url{https://restcountries.com/v3.1/alpha/co}) tiene el mismo problema del ejercicio 2: responde con el aviso de versión descontinuada. La petición REST va a countries.dev, que conserva la misma ruta: \texttt{GET \{\{countriesDevUrl\}\}/alpha/co}, sin \texttt{fields}. La GraphQL es un \texttt{POST} a \url{https://countries.trevorblades.com/graphql} con la consulta de la guía en el cuerpo; Postman la envía como \texttt{\{"query": "..."\}}.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{6.4cm}@{}}
+\hline
+Petición & Cuerpo de la respuesta & Total en Postman (con headers) & Qué trae \\
+\hline
+REST & 689 bytes & 1,24 KB & 24 campos: área, coeficiente de Gini, bandera, fronteras, husos horarios, códigos telefónicos, dominio de internet\ldots{} \\
+GraphQL & 110 bytes & 954 B & Los 4 campos pedidos: \texttt{name}, \texttt{capital}, \texttt{currency} y \texttt{languages}. \\
+\hline
+\end{tabular}
+\end{center}
+
+El cuerpo REST es seis veces más grande, y de sus 24 campos la pantalla solo necesitaba 3. Eso es el \emph{overfetching}: el servidor decide la forma de la respuesta y el cliente recibe todo, lo use o no. En GraphQL decide el cliente: la consulta nombra los campos y la respuesta trae solo esos. Una de las pruebas lo verifica en cada ejecución: compara el tamaño de las dos respuestas y exige que la GraphQL pese menos. Los totales de Postman están más cerca entre sí (1,24 KB contra 954 B) porque la respuesta GraphQL trae 23 headers y la REST 15: en una respuesta tan pequeña, los headers pesan tanto como los datos.
+
+En una red móvil esto importa por cuatro razones. Cada byte cuenta contra el plan de datos del usuario. La radio del teléfono consume batería mientras transmite. La latencia es alta y variable, y una respuesta más grande tarda más en llegar completa. Y el teléfono tiene que convertir todo el JSON aunque descarte casi todo. Con un país la diferencia es de 579 bytes; en una lista de 250 países, o en una pantalla que se recarga muchas veces, el desperdicio se multiplica. REST también puede evitarlo, si la API lo ofrece: \texttt{?fields=name,capital,currencies} en countries.dev, como en el ejercicio 2. La diferencia es que en REST lo decide quien diseña cada endpoint, y en GraphQL viene incluido en el lenguaje de consulta.
+
+\captura{ej3-a-rest.png}{Figura 24. REST: \texttt{GET /alpha/co} sin \texttt{fields}, 1,24 KB.}
+
+\captura{ej3-a-graphql.png}{Figura 25. GraphQL: la misma información en 954 B.}
+
+\subsection*{(b) SOAP}
+
+El servicio de la guía, \texttt{www.dataaccess.com}, corta la conexión desde este equipo: falla por HTTPS y por HTTP, y también su página principal. Lo reemplacé por el \emph{CountryInfoService} de \texttt{webservices.oorsprong.org}, que es de la misma empresa (Data Access) y corre en la misma plataforma (DataFlex), así que el sobre y la respuesta tienen la misma forma. Con la operación \texttt{FullCountryInfo} y el código \texttt{CO} pide los datos de Colombia, los mismos del literal (a), así que el ejercicio queda con tres maneras de pedir la misma información. Como no hay número que convertir, el número del grupo no se usa en este literal.
+
+La petición es \texttt{POST} a \url{http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso} con el header \texttt{Content-Type: text/xml; charset=utf-8} y este sobre:
+
+\begin{lstlisting}
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FullCountryInfo xmlns="http://www.oorsprong.org/websamples.countryinfo">
+      <sCountryISOCode>CO</sCountryISOCode>
+    </FullCountryInfo>
+  </soap:Body>
+</soap:Envelope>
+\end{lstlisting}
+
+En la respuesta (figura 26):
+
+\begin{description}
+  \raggedright
+  \item[Envelope.] \texttt{<soap:Envelope>} envuelve todo el mensaje y declara con \texttt{xmlns:soap} que es SOAP 1.1. Aquí no trae \texttt{<soap:Header>}, que es opcional; ahí iría, por ejemplo, la firma de WS-Security.
+  \item[Body.] \texttt{<soap:Body>} contiene la respuesta de la operación, \texttt{<m:FullCountryInfoResponse>}. El nombre se arma con el de la operación más \texttt{Response}.
+  \item[Resultado.] \texttt{<m:FullCountryInfoResult>} trae los datos: \texttt{sName} \texttt{Colombia}, \texttt{sCapitalCity} \texttt{Bogota}, \texttt{sCurrencyISOCode} \texttt{COP} y, dentro de \texttt{Languages}, \texttt{Spanish}.
+\end{description}
+
+En SOAP, la operación no se elige con el método ni con la ruta, sino con el elemento que va dentro del Body: todas las llamadas son \texttt{POST} a la misma URL. El mismo contenido que GraphQL entregó en 110 bytes ocupa aquí 906 bytes sin comprimir, por las etiquetas de apertura y cierre y los espacios de nombres. El servicio solo funciona por HTTP: el sobre viaja sin cifrar, y cualquiera en la red puede leerlo o modificarlo.
+
+\captura{ej3-b-soap.png}{Figura 26. \texttt{FullCountryInfo} de Colombia: Envelope, Body y resultado.}
+
+El contrato de un servicio SOAP se publica como un documento WSDL (\emph{Web Services Description Language}), en la misma URL del servicio con \texttt{?WSDL} al final. Es un XML que describe los tipos de datos (\texttt{types}), los mensajes de entrada y salida (\texttt{message}), las operaciones (\texttt{portType}, con \texttt{FullCountryInfo} y otras 20), cómo se transportan (\texttt{binding}) y la dirección del servicio (\texttt{service}, con \texttt{soap:address}). Con el WSDL, herramientas como \texttt{wsimport} en Java generan el cliente completo. Es el equivalente de la especificación OpenAPI del ejercicio 4, pero obligatorio y escrito para máquinas.
+
+Este servidor responde distinto según cómo termine la URL. Con \texttt{?WSDL} exacto entrega el WSDL. Sin parámetro, o con \texttt{?WSDL=}, entrega una página HTML que lista las operaciones para leerlas en el navegador. Eso causó un problema: enviada sola, la petición recibía el WSDL, pero en el Collection Runner recibía el HTML y la prueba fallaba. El Runner mostraba que había enviado \texttt{?WSDL=}. La causa está en cómo Postman guarda la petición: el parámetro \texttt{WSDL} queda con valor vacío (\texttt{""}), y su librería lo convierte en \texttt{?WSDL=}; solo un parámetro sin valor (\texttt{null}) sale como \texttt{?WSDL}. La solución fue poner la URL completa en una variable del environment, \texttt{soapWsdlUrl}: así la petición guardada no tiene parámetros, y la URL se arma recién al enviarla, ya con \texttt{?WSDL} sin igual.
+
+\captura{ej3-b-wsdl.png}{Figura 27. El WSDL del servicio: \texttt{portType} con sus operaciones.}
+
+\subsection*{(c) WebSocket}
+
+La conexión a \texttt{wss://ws.postman-echo.com/raw} se abrió a las 17:08:59, envió \texttt{hola}, \texttt{Musubi Japan} y \texttt{grupo 0}, recibió cada uno de vuelta entre 308 y 386 ms después, y se cerró a las 17:09:22.
+
+La diferencia con las peticiones anteriores es que no hay peticiones: hay una conexión. En HTTP, cada intercambio es una petición del cliente seguida de una respuesta del servidor, y el servidor no puede hablar si no le preguntan. WebSocket empieza con una petición HTTP con el header \texttt{Upgrade: websocket}, el servidor responde \texttt{101 Switching Protocols}, y desde ahí la conexión deja de ser HTTP: queda abierta, y cualquiera de los dos lados envía mensajes cuando quiera, sin esperar al otro y sin repetir headers. Los mensajes no tienen método, URL ni código de estado; son texto (o binario) dentro de un marco de unos pocos bytes. Aquí el servidor solo devuelve el eco, pero podría enviar mensajes sin que nadie se los pida.
+
+Para los tres mensajes se abrió \textbf{una sola conexión}: el panel muestra un solo \emph{Connected} al principio y un solo \emph{Disconnected} al final. Con HTTP habrían sido tres peticiones, cada una con sus headers completos.
+
+\captura{ej3-c-websocket.png}{Figura 28. Una conexión, tres mensajes enviados y tres ecos.}
+
+\subsection*{(d) Webhooks}
+
+La petición fue un \texttt{POST} a la URL única de webhook.site con \texttt{\{"evento": "pago.aprobado", "pedidoId": 123\}}, y la página la mostró al instante con su método, sus headers y el cuerpo. En la captura difuminé la IP y la ubicación del equipo, que webhook.site muestra.
+
+En un webhook la comunicación la inicia \textbf{quien produce el evento}: la pasarela de pagos llama a la aplicación cuando el pago se aprueba, en vez de que la aplicación le pregunte cada tanto si ya se aprobó. Los papeles se invierten: el sistema que recibe el aviso es el servidor, y tiene que exponer una URL pública para que lo encuentren.
+
+Esa URL pública es el problema, y este ejercicio lo muestra: el aviso de ``pago aprobado'' que recibió webhook.site no lo envió ninguna pasarela, sino Postman (\texttt{user-agent: PostmanRuntime/2.14.0}). Cualquiera que conozca la URL puede hacer lo mismo. Antes de confiar en el mensaje, el receptor debe validar:
+
+\begin{description}
+  \raggedright
+  \item[La firma.] La pasarela firma el cuerpo con un secreto compartido (normalmente un HMAC-SHA256) y envía la firma en un header. El receptor recalcula la firma con su copia del secreto y la compara; si no coincide, descarta el mensaje. Así sabe quién lo envió y que nadie lo cambió en el camino.
+  \item[La fecha.] La firma debe incluir una marca de tiempo, y el receptor debe rechazar mensajes de hace más de unos minutos. Si no, alguien que capture un aviso válido puede reenviarlo después.
+  \item[Que no esté repetido.] Las pasarelas reintentan cuando no reciben un \texttt{2xx}, así que el mismo evento puede llegar varias veces. El receptor guarda el identificador de cada evento y no aprueba dos veces el mismo pedido.
+  \item[Que los datos tengan sentido.] Que el pedido 123 exista, esté pendiente y el monto coincida. Para un pago, lo más seguro es tomar el aviso solo como una señal y consultar el estado real en la API de la pasarela antes de entregar algo.
+\end{description}
+
+Además, la URL debe ser HTTPS, y el receptor debe responder \texttt{200} rápido y procesar el evento después, para que la pasarela no crea que falló y lo reintente.
+
+\captura{ej3-d-postman.png}{Figura 29. El aviso enviado desde Postman.}
+
+\captura{ej3-d-webhooksite.png}{Figura 30. El aviso recibido en webhook.site (IP y ubicación difuminadas).}
+
+\subsection*{(e) gRPC}
+
+Un archivo \texttt{.proto} es el contrato de un servicio gRPC, escrito en el lenguaje de Protocol Buffers. Define los mensajes, con cada campo tipado y numerado, y los servicios con sus métodos. Por ejemplo, para la mascota de Musubi:
+
+\begin{lstlisting}
+syntax = "proto3";
+
+message Frase {
+  string texto = 1;
+  string nivel = 2;
+}
+
+message Correccion {
+  bool correcta = 1;
+  string sugerencia = 2;
+  repeated string explicaciones = 3;
+}
+
+service Mascota {
+  rpc Corregir (Frase) returns (Correccion);
+  rpc Conversar (stream Frase) returns (stream Correccion);
+}
+\end{lstlisting}
+
+Con el compilador \texttt{protoc} se genera, a partir de ese archivo, el código del cliente y del servidor en Java, Kotlin, Go, Python y otros lenguajes. El cliente llama a \texttt{Corregir} como si fuera un método local. Los mensajes viajan en binario: cada campo se identifica por su número (\texttt{1}, \texttt{2}, \texttt{3}), no por su nombre, y por eso pesan mucho menos que el JSON equivalente. Los números también permiten cambiar el contrato sin romper a los clientes viejos, siempre que no se reutilicen.
+
+gRPC se usa más entre servicios de backend por tres razones:
+
+\begin{description}
+  \raggedright
+  \item[El navegador no puede hablarlo.] gRPC necesita HTTP/2 con control de sus marcos y de los \emph{trailers}, donde viaja el estado de la llamada. El navegador usa HTTP/2 por dentro, pero no le da ese control a JavaScript. Para usarlo desde una página hace falta gRPC-Web y un proxy intermedio, como Envoy, que traduzca.
+  \item[Entre servicios es donde más rinde.] Los servicios de un backend se llaman miles de veces por segundo. Ahí importan los mensajes binarios, la conexión HTTP/2 que lleva muchas llamadas a la vez y el \emph{streaming} en ambos sentidos, como en \texttt{Conversar}.
+  \item[El contrato se comparte.] Cliente y servidor deben compilarse con el mismo \texttt{.proto}. Eso es fácil cuando ambos los mantiene el mismo equipo, y difícil con clientes externos que no controlamos. Además, el binario no se lee ni se prueba a mano como un JSON, y para una API pública eso es una desventaja.
+\end{description}
+
+\subsection*{(f) Tabla comparativa}
+
+Los casos de uso son de Musubi Japan, la aplicación móvil para aprender japonés del proyecto de aula. El estudio funciona sin conexión; la red se usa para descargar contenido, para la mascota (una capa con IA que propone ejercicios y corrige frases) y para la suscripción que la paga.
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.7cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{5.6cm}@{}}
+\hline
+Protocolo & Formato de datos & ¿Quién inicia? & ¿Conexión persistente? & Caso de uso en Musubi \\
+\hline
+REST & JSON sobre HTTP & El cliente & No: cada petición es independiente & Descargar paquetes de frases, kanji y vocabulario para estudiar sin conexión: \texttt{GET /paquetes/\{id\}}. \\
+GraphQL & Consulta GraphQL; respuesta JSON & El cliente & No (salvo las \emph{subscriptions}, que van por WebSocket) & La pantalla de una frase pide sus piezas con solo los campos que muestra: lectura, significado y nivel de cada kanji. \\
+SOAP & XML en un sobre, con contrato WSDL & El cliente & No & Emitir la factura electrónica de cada pago de la suscripción ante la DIAN, cuyos servicios web son SOAP. \\
+WebSocket & Mensajes de texto o binarios, casi siempre JSON & El cliente abre; después, cualquiera de los dos & Sí & La práctica de conversación con la mascota: la corrección llega mientras se genera, y la mascota puede intervenir sin que se le pida. \\
+Webhook & JSON en un \texttt{POST} HTTP & El proveedor del evento & No: un aviso por evento & La pasarela de pagos o Google Play avisa al servidor que la suscripción se aprobó, se renovó o se canceló. \\
+gRPC & Protocol Buffers (binario) sobre HTTP/2 & El cliente; con \emph{streaming}, los dos envían & Sí: una conexión HTTP/2 con muchas llamadas & Entre el servidor de Musubi y el servicio de IA de la mascota, que se llaman muchas veces y comparten el \texttt{.proto}. \\
+\hline
+\end{tabular}
+\end{center}
+
 \section*{Ejercicio 4. Diseño y documentación de una API REST}
 
 \end{document}
