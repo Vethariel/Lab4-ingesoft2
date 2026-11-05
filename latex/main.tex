@@ -236,6 +236,128 @@ El Collection Runner ejecutó la carpeta completa, en orden, con el environment 
 
 \section*{Ejercicio 2. Un cliente REST en Java}
 
+El proyecto Maven está en la carpeta \texttt{cliente-java} del repositorio. Hace las peticiones con \texttt{java.net.http.HttpClient} y convierte el JSON con Gson 2.11.0. El paquete \texttt{dominio} tiene los registros \texttt{Clima} y \texttt{Pais}, las interfaces de los repositorios y las excepciones; \texttt{infraestructura} tiene las clases que hablan HTTP. El dominio no importa nada de \texttt{java.net} ni de Gson.
+
+\textbf{REST Countries ya no sirve.} La URL de la guía, \url{https://restcountries.com/v3.1/name/colombia?fields=name,capital,population,latlng}, hoy responde \texttt{301 Moved Permanently} hacia otro servidor, y ese servidor responde \texttt{200} con \texttt{"success": false} y el mensaje \emph{This API version has been deprecated}. Responde igual para Colombia y para Wakanda. La versión nueva, la v5, exige una llave: sin ella responde \texttt{401} con \texttt{authKeyMissing}, y con la llave de demostración devuelve siempre a Canadá. Por eso el programa usa \texttt{countries.dev}, un servicio gratuito y sin llave que conserva las rutas de REST Countries (\texttt{/name/\{nombre\}}, con \texttt{?fields=}). Lo que cambia es la forma del JSON: \texttt{name} y \texttt{capital} son texto en vez de objeto y lista. La clase se llama \texttt{CountriesDevPaisRepository}, y no \texttt{RestCountriesPaisRepository}, porque lleva el nombre de la API con la que habla.
+
+\captura{ej2-restcountries-v31.png}{Figura 22. REST Countries v3.1 hoy: la versión está descontinuada.}
+
+\subsection*{(a) Los repositorios}
+
+En \texttt{OpenMeteoClimaRepository}, los cuatro TODO quedaron así:
+
+\begin{lstlisting}
+try {
+    HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+    if (res.statusCode() != 200) {
+        throw new ClimaNoDisponible("Open-Meteo respondió " + res.statusCode() + motivo(res.body()));
+    }
+    JsonObject actual = JsonParser.parseString(res.body())
+        .getAsJsonObject().getAsJsonObject("current");
+    return new Clima(actual.get("temperature_2m").getAsDouble(),
+                     actual.get("wind_speed_10m").getAsDouble());
+} catch (HttpTimeoutException e) {
+    throw new ClimaNoDisponible("Open-Meteo no respondió en 5 segundos", e);
+} catch (IOException e) {
+    throw new ClimaNoDisponible("No hubo conexión con Open-Meteo", e);
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+    throw new ClimaNoDisponible("La consulta del clima se interrumpió", e);
+} catch (JsonParseException | IllegalStateException
+         | UnsupportedOperationException | NullPointerException e) {
+    throw new ClimaNoDisponible("Open-Meteo respondió en un formato inesperado", e);
+}
+\end{lstlisting}
+
+La conexión y la respuesta tienen cada una un límite de 5 segundos. \texttt{HttpTimeoutException} se atrapa antes que \texttt{IOException} porque es una subclase, y así el mensaje distingue ``tardó demasiado'' de ``no hay red''. \texttt{InterruptedException} vuelve a marcar el hilo como interrumpido antes de traducirse, para que quien llamó se entere. El último \texttt{catch} cubre un cuerpo que no es JSON o al que le falta \texttt{current}. Cuando Open-Meteo responde \texttt{400}, explica el motivo en el campo \texttt{reason}, y el mensaje lo incluye.
+
+\texttt{PaisRepository} declara dos excepciones distintas: \texttt{PaisNoEncontrado} (el servicio respondió, pero el país no existe) y \texttt{PaisNoDisponible} (el servicio falló). La diferencia importa porque lo que hace el usuario es distinto en cada caso: en el primero corrige el nombre; en el segundo, reintenta más tarde.
+
+\begin{lstlisting}
+public interface PaisRepository {
+    Pais buscar(String nombre) throws PaisNoEncontrado, PaisNoDisponible;
+}
+\end{lstlisting}
+
+\texttt{CountriesDevPaisRepository} lee el JSON con Gson en un registro privado que copia la forma de la respuesta, y después lo convierte en \texttt{Pais}. Así, la forma del JSON de countries.dev no sale de esa clase. Tres detalles: el nombre se codifica en la URL (\texttt{Costa Rica} viaja como \texttt{Costa\%20Rica}); la búsqueda es por coincidencia parcial y \texttt{india} trae también el Territorio Británico del Océano Índico, así que gana el país cuyo nombre coincide exactamente; y la Antártida no tiene capital, así que \texttt{capital} puede llegar en \texttt{null}.
+
+\subsection*{(b) El programa}
+
+\texttt{App.main} recibe el nombre del país en los argumentos. Se ejecuta con:
+
+\begin{lstlisting}
+cd cliente-java
+mvn -q compile exec:java -Dexec.args="Colombia"
+\end{lstlisting}
+
+Resultados del 5 de noviembre de 2026:
+
+\begin{lstlisting}
+$ Colombia
+Colombia (capital Bogotá, 50.882.884 hab.): 30,0 °C, viento 1,2 km/h
+$ Costa Rica
+Costa Rica (capital San José, 5.094.114 hab.): 19,4 °C, viento 2,4 km/h
+$ india
+India (capital New Delhi, 1.380.004.385 hab.): 23,8 °C, viento 5,1 km/h
+$ Antarctica
+Antarctica (sin capital, 1.000 hab.): -34,0 °C, viento 18,9 km/h
+\end{lstlisting}
+
+Los números salen con el formato de Colombia (\texttt{Locale es-CO}): punto para los miles y coma para los decimales. Los 30~°C de Colombia no son los de Bogotá: \texttt{latlng} es el centro geográfico del país (\texttt{4, -72}, en los Llanos), no la capital. Con las coordenadas de Bogotá (\texttt{4.61, -74.08}), Open-Meteo daba 17,7~°C a la misma hora. La población es la de 2020, la que trae countries.dev; el ejemplo de la guía usaba un dato más reciente.
+
+\subsection*{(c) Un país inexistente}
+
+REST Countries v3.1 respondía \texttt{404 Not Found} a \texttt{/name/wakanda}. Hoy responde lo mismo que a cualquier otro país: \texttt{301} y, al seguir la redirección, \texttt{200} con el aviso de versión descontinuada. countries.dev responde \texttt{404 Not Found}, con un cuerpo que no es JSON: \texttt{Content-Type: text/plain} y el texto \texttt{Country not found}. Por eso el repositorio revisa el código antes de leer el cuerpo: si intentara convertir ese texto con Gson, fallaría. En Postman, las pruebas de esta petición verifican las tres cosas: el \texttt{404}, el \texttt{Content-Type} y el texto. Están en \texttt{postman/scripts-ejercicio2.js}, junto con las de las otras peticiones de la carpeta.
+
+\captura{ej2-c-wakanda.png}{Figura 23. \texttt{GET https://countries.dev/name/wakanda}: 404 en texto plano.}
+
+El \texttt{404} se convierte en \texttt{PaisNoEncontrado}, y \texttt{main} la atrapa y muestra un mensaje. Las demás fallas también terminan en un mensaje: lo comprobé sin red y con un servidor que acepta la conexión pero nunca responde (el programa se rindió a los 5,8 segundos):
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+$ wakanda
+No existe un país llamado "wakanda". Escriba el nombre en inglés, por ejemplo Spain o Germany.
+$ Colombia        (sin red)
+No se pudo completar la consulta: No hubo conexión con countries.dev. Intente más tarde.
+$ Colombia        (servidor que no responde)
+No se pudo completar la consulta: countries.dev no respondió en 5 segundos. Intente más tarde.
+\end{lstlisting}
+
+Los mensajes van por la salida de errores y el programa termina con código 1, para que un script que lo llame sepa que falló. Si no recibe un nombre, explica cómo usarlo y termina con código 2.
+
+\subsection*{(d) Por qué \texttt{main} depende de la interfaz}
+
+El principio de inversión de dependencias dice que la lógica de alto nivel no debe depender de los detalles, sino de abstracciones, y que la abstracción la define quien la usa. Aquí, \texttt{ClimaRepository} vive en el paquete \texttt{dominio} y dice lo que el dominio necesita (``el clima en estas coordenadas''), sin mencionar HTTP, URLs ni JSON. \texttt{OpenMeteoClimaRepository} vive en \texttt{infraestructura} e implementa esa interfaz. La dependencia apunta de la infraestructura hacia el dominio, no al revés.
+
+El cálculo del resumen está en el método \texttt{resumen}, que recibe un \texttt{PaisRepository} y un \texttt{ClimaRepository}. \texttt{main} es el único lugar que conoce las clases concretas: las crea en dos líneas y se las pasa. Este ejercicio lo puso a prueba sin buscarlo: cuando REST Countries dejó de servir, el cambio fue escribir \texttt{CountriesDevPaisRepository} y cambiar una línea de \texttt{main}. \texttt{resumen}, \texttt{Pais} y la interfaz no se tocaron. La misma separación permite probar \texttt{resumen} con repositorios falsos que devuelven datos fijos, sin red.
+
+En DDD, un Repository es la abstracción con la que el dominio obtiene sus objetos como si estuvieran en una colección, sin saber de dónde salen. Su interfaz pertenece al dominio y su implementación a la infraestructura. Aquí los datos no salen de una base de datos sino de una API, pero el papel es el mismo. Además, cada repositorio traduce el modelo ajeno al propio: el JSON de countries.dev (\texttt{name}, \texttt{latlng} como lista) se convierte en \texttt{Pais} (\texttt{nombre}, \texttt{lat}, \texttt{lon}) y los errores de red en excepciones del dominio. Así, los cambios de una API externa se quedan en una sola clase.
+
+\subsection*{(e) En una app Android}
+
+\begin{description}
+  \raggedright
+  \item[El hilo.] Android no deja hacer peticiones de red en el hilo principal, que es el que dibuja la pantalla: lanza \texttt{NetworkOnMainThreadException}. La petición tiene que correr en un hilo de fondo, por ejemplo con una corrutina en \texttt{viewModelScope} y \texttt{Dispatchers.IO}. El resultado se publica de vuelta para que la vista se actualice en el hilo principal. \texttt{viewModelScope} cancela la petición si el usuario cierra la pantalla.
+  \item[El permiso.] En el \texttt{AndroidManifest.xml} hace falta \texttt{<uses-permission android:name="android.permission.INTERNET" />}. Es un permiso normal: se concede al instalar, sin preguntarle al usuario. Las dos APIs son HTTPS, y eso importa, porque desde Android 9 el tráfico HTTP sin cifrar está bloqueado por defecto.
+  \item[El cliente HTTP.] Android no incluye \texttt{java.net.http.HttpClient}. Habría que cambiarlo por OkHttp o Retrofit, y ese cambio también queda dentro de las dos clases de infraestructura.
+\end{description}
+
+En MVVM, cada clase iría en una capa:
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{11.6cm}@{}}
+\hline
+Capa & Qué hay \\
+\hline
+Model: dominio & \texttt{Clima}, \texttt{Pais}, \texttt{ClimaRepository}, \texttt{PaisRepository} y las excepciones. No cambian. \\
+Model: datos & \texttt{OpenMeteoClimaRepository} y \texttt{CountriesDevPaisRepository}, reescritas con Retrofit u OkHttp. \\
+ViewModel & Un \texttt{ClimaPaisViewModel} que recibe los repositorios por constructor, hace lo que hoy hace \texttt{resumen} y expone el estado de la pantalla (cargando, resultado o mensaje de error) como \texttt{StateFlow} o \texttt{LiveData}. Las excepciones se convierten aquí en mensajes, como hoy en \texttt{main}. \\
+View & La \texttt{Activity}, el \texttt{Fragment} o la pantalla de Compose: un campo para el país y un botón. Observa el estado y lo dibuja; no hace peticiones. \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{main} desaparece. La creación de los repositorios pasa a una \texttt{ViewModelProvider.Factory} o a un inyector de dependencias como Hilt.
+
 \section*{Ejercicio 3. Los seis protocolos en la práctica}
 
 \section*{Ejercicio 4. Diseño y documentación de una API REST}
