@@ -1,0 +1,39 @@
+# Sistema
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Secretos y entornos locales
+.env
+.env.*
+!.env.example
+
+# Editores
+.idea/
+.vscode/
+*.iml
+
+# Java / Maven
+target/
+*.class
+
+# Enunciado del laboratorio: se queda en local
+/Laboratorio4_REST_APIs.pdf
+
+# PDFs. El único que entra al repositorio es el informe compilado.
+*.pdf
+!/docs/informe.pdf
+
+# Restos de compilación si aparecen fuera de latex/
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.lof
+*.lot

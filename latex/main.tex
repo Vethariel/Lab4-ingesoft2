@@ -1,0 +1,138 @@
+\documentclass[11pt]{article}
+
+\usepackage{fontspec}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{graphicx}
+
+\setmainfont{Latin Modern Roman}
+
+% Captura de Postman: usa capturas/#1 si existe; si no, deja el recuadro para tomarla
+\graphicspath{{capturas/}}
+\newcommand{\captura}[2]{%
+  \begin{center}
+  \IfFileExists{capturas/#1}%
+    {\includegraphics[width=\linewidth,height=0.4\textheight,keepaspectratio]{#1}}%
+    {\fbox{\parbox[c][3cm][c]{0.9\linewidth}{\centering\small Captura pendiente: \texttt{capturas/#1}}}}\\[0.6em]
+  {\small #2}
+  \end{center}}
+
+\hypersetup{
+  pdftitle={Laboratorio 4. REST APIs},
+  pdfauthor={Daniel Alonso Gracia Pinto},
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue
+}
+
+\title{Laboratorio 4: REST APIs\\[0.35em]
+\large HTTP, consumo desde Java, protocolos y diseño de una API con OpenAPI\\[0.25em]
+\normalsize Ingeniería de Software II (2016702)}
+\author{Daniel Alonso Gracia Pinto}
+\date{Noviembre de 2026\\[0.35em]
+\normalsize Grupo 00}
+
+\begin{document}
+\maketitle
+\vspace{-1.6em}
+
+\section*{Ejercicio 0. Anatomía de una petición HTTP}
+
+Las peticiones van a \texttt{https://httpbin.org}, que devuelve en el cuerpo lo que recibió: los parámetros, los headers y el cuerpo de la petición.
+
+\subsection*{(a) Partes de la URL}
+
+La petición es \texttt{GET https://httpbin.org/get?curso=seii\&grupo=3}.
+
+\begin{center}
+\begin{tabular}{@{}p{4.2cm}p{5cm}@{}}
+\hline
+Parte & Valor \\
+\hline
+Esquema & \texttt{https} \\
+Host & \texttt{httpbin.org} \\
+Ruta & \texttt{/get} \\
+Parámetros de consulta & \texttt{curso=seii}, \texttt{grupo=3} \\
+\hline
+\end{tabular}
+\end{center}
+
+El signo \texttt{?} separa la ruta de los parámetros y \texttt{\&} separa un parámetro del siguiente. En la respuesta, los parámetros aparecen en el campo \texttt{args}, ya convertidos en un objeto: \texttt{\{"curso": "seii", "grupo": "3"\}}. El \texttt{3} llega como texto, porque en la URL todo es texto y el servidor no sabe que era un número.
+
+\captura{ej0-a.png}{Figura 1. \texttt{GET /get} con los parámetros \texttt{curso} y \texttt{grupo}.}
+
+\subsection*{(b) Headers}
+
+Además del \texttt{X-Equipo: Musubi Japan}, Postman agregó por su cuenta siete headers: \texttt{Cache-Control} (\texttt{no-cache}), \texttt{Postman-Token} (un identificador distinto en cada envío), \texttt{Host}, \texttt{User-Agent} (\texttt{PostmanRuntime/2.12.2}), \texttt{Accept} (\texttt{*/*}), \texttt{Accept-Encoding} (\texttt{gzip, deflate, br}) y \texttt{Connection} (\texttt{keep-alive}). El campo \texttt{headers} de la respuesta los muestra todos menos \texttt{Connection}: ese header solo vale entre dos equipos vecinos de la red, y el intermediario que tiene httpbin.org adelante no lo reenvía.
+
+\begin{description}
+  \raggedright
+  \item[\texttt{User-Agent}.] Identifica el programa que hace la petición. El servidor lo usa para estadísticas, para adaptar la respuesta o para bloquear clientes. Con \texttt{curl} la misma petición llega con \texttt{curl/8.18.0}.
+  \item[\texttt{Accept}.] Dice qué formatos de respuesta acepta el cliente. \texttt{*/*} significa cualquiera; una app que solo entiende JSON debería enviar \texttt{application/json}.
+  \item[\texttt{Host}.] Dice a qué sitio va la petición. Un mismo servidor, con una sola IP, puede atender muchos dominios, y por el \texttt{Host} sabe cuál se pidió. En HTTP/1.1 es obligatorio.
+\end{description}
+
+\captura{ej0-b.png}{Figura 2. La misma petición con el header \texttt{X-Equipo}.}
+
+\subsection*{(c) Cuerpo JSON}
+
+El cuerpo enviado a \texttt{POST https://httpbin.org/post} es:
+
+\begin{quote}
+\ttfamily
+\{\\
+\hspace*{1em}"equipo": "Musubi Japan",\\
+\hspace*{1em}"grupo": 0,\\
+\hspace*{1em}"integrantes": ["Daniel Alonso Gracia Pinto"],\\
+\hspace*{1em}"proyecto": "App móvil para aprender japonés"\\
+\}
+\end{quote}
+
+El header que le dice al servidor que el cuerpo es JSON es \texttt{Content-Type: application/json}. Postman lo pone solo al elegir \emph{raw} y \emph{JSON}. La respuesta trae el cuerpo dos veces: en \texttt{data}, como texto, y en \texttt{json}, ya convertido en objeto.
+
+Al cambiar a \emph{Text}, Postman envía \texttt{Content-Type: text/plain}. El httpbin.org de hoy sigue llenando \texttt{json} con ese header: intenta leer el cuerpo como JSON sin mirar el \texttt{Content-Type}. Lo comprobé con un cuerpo que no es JSON (\texttt{hola equipo}): ahí \texttt{json} sale en \texttt{null} y el texto solo queda en \texttt{data}. El httpbin original, en cambio, devolvía \texttt{json: null} siempre que el tipo no fuera \texttt{application/json}. Eso es lo que debería hacer una API real: no adivinar el formato, sino responder \texttt{415 Unsupported Media Type} si el \texttt{Content-Type} no es el que espera.
+
+\captura{ej0-c-json.png}{Figura 3. \texttt{POST /post} con el cuerpo como JSON.}
+
+\captura{ej0-c-text.png}{Figura 4. El mismo cuerpo enviado como \emph{Text}: \texttt{json} sigue lleno.}
+
+\captura{ej0-c-text-hola.png}{Figura 5. Un cuerpo \emph{Text} que no es JSON: \texttt{json} sale en \texttt{null}.}
+
+\subsection*{(d) Códigos de estado}
+
+Las tres respuestas llegan con el cuerpo vacío (\texttt{Content-Length: 0}). La app solo cuenta con el código para decidir qué mostrar.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{1.2cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{5.3cm}@{}}
+\hline
+Código & Familia & Responsable & Qué muestra la app \\
+\hline
+201 Created & 2xx & No hay error: el servidor creó el recurso. & Una confirmación (``Préstamo registrado'') y el recurso nuevo. \\
+404 Not Found & 4xx & El cliente: pidió un recurso que no existe o una URL mal armada. & ``No encontramos lo que buscas'' y la opción de volver. Reintentar no sirve. \\
+500 Internal Server Error & 5xx & El servidor: falló al procesar una petición válida. & ``Algo salió mal de nuestro lado, intenta más tarde'', con un botón para reintentar y sin detalles técnicos. \\
+429 Too Many Requests & 4xx & El cliente: superó el límite de peticiones del servidor. & Nada de inmediato: espera lo que indique el servidor y reintenta sola. Si tarda, ``Hay mucho tráfico, reintentando\ldots''. \\
+\hline
+\end{tabular}
+\end{center}
+
+El 429 no se pidió: apareció al enviar la petición de (a). httpbin.org admite 17 peticiones por segundo por IP. Postman estaba usando su \emph{Cloud Agent}, que envía la petición desde los servidores de Postman, con una IP que comparten muchos usuarios a la vez; la misma petición enviada con \texttt{curl} desde el equipo respondió 200. Al pasar al agente de escritorio, la petición salió con la IP propia y el 429 desapareció. A diferencia de los códigos de \texttt{/status}, este trae cuerpo, con el motivo y el tiempo de espera: \texttt{retry after 1 second}. Reintentar sí sirve aquí, pero esperando; reintentar enseguida solo alarga el bloqueo.
+
+\captura{ej0-d-201.png}{Figura 6. Respuesta de \texttt{/status/201}.}
+
+\captura{ej0-d-404.png}{Figura 7. Respuesta de \texttt{/status/404}.}
+
+\captura{ej0-d-500.png}{Figura 8. Respuesta de \texttt{/status/500}.}
+
+\captura{ej0-d-429.png}{Figura 9. El 429 que devolvió httpbin.org al superar el límite de peticiones.}
+
+\section*{Ejercicio 1. CRUD completo con JSONPlaceholder}
+
+\section*{Ejercicio 2. Un cliente REST en Java}
+
+\section*{Ejercicio 3. Los seis protocolos en la práctica}
+
+\section*{Ejercicio 4. Diseño y documentación de una API REST}
+
+\end{document}
