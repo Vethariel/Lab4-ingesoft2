@@ -128,7 +128,7 @@ Las tres respuestas llegan con el cuerpo vacío (\texttt{Content-Length: 0}). La
 \hline
 Código & Familia & Responsable & Qué muestra la app \\
 \hline
-201 Created & 2xx & No hay error: el servidor creó el recurso. & Una confirmación (``Préstamo registrado'') y el recurso nuevo. \\
+201 Created & 2xx & No hay error: el servidor creó el recurso. & Una confirmación (``Frase guardada'') y el recurso nuevo. \\
 404 Not Found & 4xx & El cliente: pidió un recurso que no existe o una URL mal armada. & ``No encontramos lo que buscas'' y la opción de volver. Reintentar no sirve. \\
 500 Internal Server Error & 5xx & El servidor: falló al procesar una petición válida. & ``Algo salió mal de nuestro lado, intenta más tarde'', con un botón para reintentar y sin detalles técnicos. \\
 429 Too Many Requests & 4xx & El cliente: superó el límite de peticiones del servidor. & Nada de inmediato: espera lo que indique el servidor y reintenta sola. Si tarda, ``Hay mucho tráfico, reintentando\ldots''. \\
@@ -255,7 +255,8 @@ En \texttt{OpenMeteoClimaRepository}, los cuatro TODO quedaron así:
 try {
     HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
     if (res.statusCode() != 200) {
-        throw new ClimaNoDisponible("Open-Meteo respondió " + res.statusCode() + motivo(res.body()));
+        throw new ClimaNoDisponible("Open-Meteo respondió " + res.statusCode()
+            + motivoDelError(res.body()));
     }
     JsonObject actual = JsonParser.parseString(res.body())
         .getAsJsonObject().getAsJsonObject("current");
@@ -365,7 +366,7 @@ View & La \texttt{Activity}, el \texttt{Fragment} o la pantalla de Compose: un c
 
 \section*{Ejercicio 3. Los seis protocolos en la práctica}
 
-Las peticiones HTTP están en la carpeta \texttt{Ejercicio 3} de la colección \texttt{Lab4-00}, con pruebas en \emph{Scripts → Post-response}. Las pruebas están en \texttt{postman/scripts-ejercicio3.js}. La conexión WebSocket está en otra colección, \texttt{Lab4-00 WebSocket}, porque Postman guarda las peticiones WebSocket en un tipo de colección distinto al de las HTTP.
+Las peticiones HTTP están en la carpeta \texttt{Ejercicio 3} de la colección \texttt{Lab4-00}, y sus pruebas, en \texttt{postman/scripts-ejercicio3.js}. La conexión WebSocket quedó en otra colección, \texttt{Lab4-00 WebSocket}, porque Postman guarda las peticiones WebSocket en un tipo de colección distinto al de las HTTP.
 
 \subsection*{(a) REST y GraphQL}
 
@@ -415,11 +416,11 @@ En la respuesta (figura 26):
   \item[Resultado.] \texttt{<m:FullCountryInfoResult>} trae los datos: \texttt{sName} \texttt{Colombia}, \texttt{sCapitalCity} \texttt{Bogota}, \texttt{sCurrencyISOCode} \texttt{COP} y, dentro de \texttt{Languages}, \texttt{Spanish}.
 \end{description}
 
-En SOAP, la operación no se elige con el método ni con la ruta, sino con el elemento que va dentro del Body: todas las llamadas son \texttt{POST} a la misma URL. El mismo contenido que GraphQL entregó en 110 bytes ocupa aquí 906 bytes sin comprimir, por las etiquetas de apertura y cierre y los espacios de nombres. El servicio solo funciona por HTTP: el sobre viaja sin cifrar, y cualquiera en la red puede leerlo o modificarlo.
+En SOAP, la operación no se elige con el método ni con la ruta, sino con el elemento que va dentro del Body: todas las llamadas son \texttt{POST} a la misma URL. La respuesta trae los mismos datos que GraphQL entregó en 110 bytes, más el código telefónico, el continente y la bandera, y ocupa 906 bytes sin comprimir. Buena parte de ese tamaño son las etiquetas de apertura y cierre y los espacios de nombres. El servicio solo funciona por HTTP: el sobre viaja sin cifrar, y cualquiera en la red puede leerlo o modificarlo.
 
 \captura{ej3-b-soap.png}{Figura 26. \texttt{FullCountryInfo} de Colombia: Envelope, Body y resultado.}
 
-El contrato de un servicio SOAP se publica como un documento WSDL (\emph{Web Services Description Language}), en la misma URL del servicio con \texttt{?WSDL} al final. Es un XML que describe los tipos de datos (\texttt{types}), los mensajes de entrada y salida (\texttt{message}), las operaciones (\texttt{portType}, con \texttt{FullCountryInfo} y otras 20), cómo se transportan (\texttt{binding}) y la dirección del servicio (\texttt{service}, con \texttt{soap:address}). Con el WSDL, herramientas como \texttt{wsimport} en Java generan el cliente completo. Es el equivalente de la especificación OpenAPI del ejercicio 4, pero obligatorio y escrito para máquinas.
+El contrato de un servicio SOAP se publica como un documento WSDL (\emph{Web Services Description Language}), en la misma URL del servicio con \texttt{?WSDL} al final. Es un XML que describe los tipos de datos (\texttt{types}), los mensajes de entrada y salida (\texttt{message}), las operaciones (\texttt{portType}, con \texttt{FullCountryInfo} y otras 20), cómo se transportan (\texttt{binding}) y la dirección del servicio (\texttt{service}, con \texttt{soap:address}). Con el WSDL, herramientas como \texttt{wsimport} en Java generan el cliente completo. Cumple el mismo papel que la especificación OpenAPI del ejercicio 4. La diferencia es que en SOAP el contrato es parte del protocolo y todo servicio lo publica, mientras que en REST es opcional.
 
 Este servidor responde distinto según cómo termine la URL. Con \texttt{?WSDL} exacto entrega el WSDL. Sin parámetro, o con \texttt{?WSDL=}, entrega una página HTML que lista las operaciones para leerlas en el navegador. Eso causó un problema: enviada sola, la petición recibía el WSDL, pero en el Collection Runner recibía el HTML y la prueba fallaba. El Runner mostraba que había enviado \texttt{?WSDL=}. La causa está en cómo Postman guarda la petición: el parámetro \texttt{WSDL} queda con valor vacío (\texttt{""}), y su librería lo convierte en \texttt{?WSDL=}; solo un parámetro sin valor (\texttt{null}) sale como \texttt{?WSDL}. La solución fue poner la URL completa en una variable del environment, \texttt{soapWsdlUrl}: así la petición guardada no tiene parámetros, y la URL se arma recién al enviarla, ya con \texttt{?WSDL} sin igual.
 
@@ -459,7 +460,7 @@ Además, la URL debe ser HTTPS, y el receptor debe responder \texttt{200} rápid
 
 \subsection*{(e) gRPC}
 
-Un archivo \texttt{.proto} es el contrato de un servicio gRPC, escrito en el lenguaje de Protocol Buffers. Define los mensajes, con cada campo tipado y numerado, y los servicios con sus métodos. Por ejemplo, para la mascota de Musubi:
+Un archivo \texttt{.proto} es el contrato de un servicio gRPC, escrito en el lenguaje de Protocol Buffers. Define los mensajes, con cada campo tipado y numerado, y los servicios con sus métodos. El siguiente ejemplo es para Musubi, la aplicación móvil para aprender japonés del proyecto de aula. Musubi tiene una \emph{mascota}, una capa con IA que propone ejercicios y corrige las frases que escribe el aprendiz:
 
 \begin{lstlisting}
 syntax = "proto3";
@@ -494,7 +495,7 @@ gRPC se usa más entre servicios de backend por tres razones:
 
 \subsection*{(f) Tabla comparativa}
 
-Los casos de uso son de Musubi Japan, la aplicación móvil para aprender japonés del proyecto de aula. El estudio funciona sin conexión; la red se usa para descargar contenido, para la mascota (una capa con IA que propone ejercicios y corrige frases) y para la suscripción que la paga.
+Los casos de uso son de Musubi. En esa aplicación el estudio funciona sin conexión, y la red se usa para tres cosas: descargar contenido, hablar con la mascota y pagar la suscripción que la sostiene.
 
 \begin{center}
 \small
@@ -515,27 +516,31 @@ gRPC & Protocol Buffers (binario) sobre HTTP/2 & El cliente; con \emph{streaming
 
 \section*{Ejercicio 4. Diseño y documentación de una API REST}
 
-La guía permite usar el dominio del proyecto de aula en lugar del préstamo de equipos, y esta API usa el de Musubi, la aplicación móvil para aprender japonés. Musubi enseña con frases, y cada frase se desglosa en \emph{piezas} de cuatro tipos: kana, kanji, vocabulario y gramática. El estudio funciona en el teléfono sin conexión, y el avance del aprendiz nunca sale de ahí.
+La guía permite reemplazar el caso del préstamo de equipos por el dominio del proyecto de aula. Por eso, esta API es de Musubi, la aplicación para aprender japonés que ya apareció en el ejercicio 3. Como las decisiones de diseño dependen del dominio, conviene explicarlo antes de entrar en los literales.
 
-La API es la de \textbf{contenidos}: el catálogo de piezas, frases, lecturas y la ruta sugerida. La aplicación trae el kana y los primeros temas de la ruta, y descarga el resto cuando tiene conexión: la ruta, el diccionario y los trazos por paquetes, y las lecturas una por una. Así no depende de traer todo el contenido ni satura el teléfono, y el contenido crece sin publicar una versión nueva de la aplicación. El equipo de Musubi escribe los contenidos por la misma API y los publica por versiones. Hasta ahora, las decisiones del proyecto decían que los contenidos venían completos dentro de la aplicación; este diseño queda como propuesta para cambiarlas.
+Musubi enseña con frases. Cada frase se desglosa en \emph{piezas}, que son de cuatro tipos: kana (los silabarios), kanji, vocabulario y gramática. Por ejemplo, わたしは学生です。 (``Soy estudiante'') contiene la palabra 学生, el kanji 学 y el patrón gramatical です. Mientras el aprendiz practica, el teléfono registra su \emph{progreso} en cada pieza: qué tanto la reconoce, qué tanto la usa y cuándo le toca repasarla. Ese progreso es un dato del aprendiz, así que nunca sale del teléfono, y el estudio funciona sin conexión.
 
-La API tiene dos clientes con permisos distintos. La aplicación solo lee, de forma anónima: leer contenido no necesita saber quién es el aprendiz. El equipo escribe con un token que tiene rol de editor.
+Hasta ahora, las decisiones del proyecto decían que todos los contenidos venían dentro de la aplicación. Esa idea tiene dos problemas: la aplicación crece con cada kanji y cada frase que se agrega, y cualquier corrección obliga a publicar una versión nueva en la tienda. La API de contenidos propone otra cosa. La aplicación trae solo lo necesario para empezar, que es el kana y los primeros temas de la ruta sugerida (el orden de estudio que propone Musubi), y descarga el resto a medida que el aprendiz avanza y hay conexión. La ruta, el diccionario y los trazos de los kanji llegan en \emph{paquetes}, y los textos de lectura, uno por uno. Una vez descargado, el contenido se usa sin red. De esta forma, el teléfono no se satura y el contenido crece sin publicar la aplicación.
+
+Del otro lado está el equipo de Musubi, que escribe los contenidos. El equipo usa la misma API, pero con permisos de escritura: crea y corrige piezas, frases y lecturas como borradores, y cuando están listos los publica juntos como una \emph{versión} del contenido. Por lo tanto, la API tiene dos clientes. La aplicación solo lee, y lo hace de forma anónima, porque para entregar contenido no hace falta saber quién es el aprendiz. El equipo, en cambio, escribe con un token que tiene rol de editor.
+
+Como este diseño cambia decisiones del proyecto de aula, queda como una propuesta para Musubi.
 
 \subsection*{(a) Recursos y endpoints}
 
-Los recursos son seis:
+Del dominio salen seis recursos:
 
 \begin{description}
   \raggedright
-  \item[Piezas.] Kana, kanji, vocabulario y gramática. Cada una tiene un identificador definitivo, tomado de la fuente cuando existe: el punto de código Unicode para kana y kanji (\texttt{kanji-5b66} es 学), el número de entrada del diccionario JMdict para el vocabulario (\texttt{vocab-1206900} es 学生) y uno propio para la gramática.
-  \item[Frases.] Enunciados que atan piezas, como わたしは学生です。 (``Soy estudiante'').
-  \item[Lecturas.] Textos para practicar. Se descargan una por una.
-  \item[Ruta.] El grupo de frases que ofrece la aplicación, ordenado por temas.
+  \item[Piezas.] Kana, kanji, vocabulario y gramática. Cada pieza tiene un identificador definitivo, que nunca cambia ni se reutiliza, porque el progreso guardado en los teléfonos se asocia a él. Cuando la fuente de los datos ofrece uno, se toma de ahí: para kana y kanji es su punto de código Unicode (\texttt{kanji-5b66} es 学), y para el vocabulario, su número de entrada en el diccionario JMdict (\texttt{vocab-1206900} es 学生). La gramática usa un nombre propio, como \texttt{gram-desu-cordial}.
+  \item[Frases.] Enunciados que atan piezas, cada uno con su traducción y el tema de la ruta al que pertenece.
+  \item[Lecturas.] Textos cortos para practicar lo aprendido. Se descargan uno por uno, porque es el aprendiz quien elige cuáles leer.
+  \item[Ruta.] El orden de estudio que propone la aplicación, dividido en temas.
   \item[Paquetes.] Lo que la aplicación descarga de una vez: un tema de la ruta, un bloque del diccionario o los trazos.
-  \item[Versiones.] Cada publicación del contenido, con lo que cambió.
+  \item[Versiones.] Cada publicación del contenido, con la lista de lo que cambió.
 \end{description}
 
-La API tiene 19 operaciones en 12 rutas, todas bajo \url{https://api.musubi.app/api/v1}. Las de escritura exigen el token de editor y pueden responder además \texttt{401} (sin token) y \texttt{403} (sin rol de editor). Las de lectura pueden responder \texttt{429} si una IP supera el límite de peticiones.
+Sobre estos recursos, la API ofrece 19 operaciones en 12 rutas, todas bajo \url{https://api.musubi.app/api/v1}. La tabla las agrupa por recurso. Hay tres códigos que no aparecen en ella para no repetirlos en cada fila. Las operaciones de escritura exigen el token de editor, así que todas pueden responder \texttt{401}, si falta el token, y \texttt{403}, si el token no tiene ese rol. A su vez, todas las de lectura pueden responder \texttt{429} cuando una IP supera el límite de peticiones.
 
 {\footnotesize
 \setlength{\LTpre}{0.6em}
@@ -573,16 +578,18 @@ PATCH & \texttt{/lecturas/\{id\}} & Corrige o retira una lectura & Los campos qu
 
 \subsection*{(b) Reglas de diseño}
 
+Cada una de las reglas vistas en clase se aplicó así:
+
 \begin{description}
   \raggedright
-  \item[Sustantivos en plural.] Cada colección es un sustantivo en plural (\texttt{piezas}, \texttt{frases}, \texttt{lecturas}, \texttt{paquetes}, \texttt{versiones}), y un elemento se nombra con su identificador debajo: \texttt{/piezas/kanji-5b66}. Así, la URL de un recurso se deduce sin documentación.
-  \item[Sin verbos en la ruta.] Lo que hace la operación lo dice el método, no la URL. Retirar y fusionar una pieza son cambios de estado (\texttt{PATCH}), y publicar es crear una versión (\texttt{POST /versiones}). No hay rutas como \texttt{/publicar} ni \texttt{/piezas/\{id\}/retirar}.
-  \item[Jerarquía.] \texttt{/piezas/\{id\}/frases} lista las frases de una pieza, que es lo que muestra la pantalla de detalle de Musubi, y \texttt{/ruta/temas} cuelga de la ruta. La jerarquía llega hasta un nivel: una frase se consulta en \texttt{/frases/\{id\}}, no en \texttt{/ruta/temas/7/frases/\{id\}}, porque su identificador ya es único.
-  \item[Filtros y paginación.] Los criterios opcionales van en la consulta y se combinan sin crear rutas: \texttt{/piezas?tipo=kanji\&nivel=N5\&q=estudio\&page=1\&size=20}. Las listas responden \texttt{\{items, page, size, total\}}, y \texttt{size} va de 1 a 100. Con \texttt{forma=食べる,学生}, la aplicación completa en una sola petición las palabras de una frase que escribió el aprendiz. Las envía sin repetir y en orden alfabético: las palabras sueltas no dicen nada del aprendiz, pero el orden de la frase sí.
-  \item[Versionado.] La ruta empieza por \texttt{/api/v1}. Esa es la versión del \emph{contrato} de la API, y solo cambia si un cambio rompe a los clientes. Es distinta de la versión del \emph{contenido} (42, 43\ldots), que sube con cada publicación del equipo y viaja en los datos, no en la URL.
+  \item[Sustantivos en plural.] Cada colección se nombra con un sustantivo en plural (\texttt{piezas}, \texttt{frases}, \texttt{lecturas}, \texttt{paquetes}, \texttt{versiones}), y cada elemento, con su identificador debajo de la colección: \texttt{/piezas/kanji-5b66}. Gracias a eso, quien conoce una ruta puede deducir las demás sin leer la documentación.
+  \item[Sin verbos en la ruta.] La acción la indica el método HTTP, no la URL. Por eso no existen rutas como \texttt{/publicar} ni \texttt{/piezas/\{id\}/retirar}: retirar o fusionar una pieza es cambiar su estado con \texttt{PATCH}, y publicar es crear una versión con \texttt{POST /versiones}. El literal (c) explica esta decisión con más detalle.
+  \item[Jerarquía.] Un recurso va debajo de otro solo cuando esa relación es lo que se consulta. Por ejemplo, \texttt{/piezas/\{id\}/frases} entrega las frases en las que aparece una pieza, que es justo lo que muestra la pantalla de detalle de Musubi. En cambio, una frase no se consulta en \texttt{/ruta/temas/7/frases/\{id\}}, sino en \texttt{/frases/\{id\}}: su identificador ya es único, y anidarla más solo alargaría la URL.
+  \item[Filtros y paginación.] Los criterios opcionales van en la consulta, así que se combinan sin crear rutas nuevas: \texttt{/piezas?tipo=kanji\&nivel=N5\&q=estudio\&page=1\&size=20}. Las listas responden con \texttt{\{items, page, size, total\}}, y \texttt{size} admite de 1 a 100, para que ninguna petición traiga el catálogo completo. Un filtro tiene además un uso propio de Musubi. Cuando el aprendiz escribe una frase con palabras que su teléfono todavía no tiene, la aplicación las pide en una sola consulta, como \texttt{forma=食べる,学生}. Las envía sin repetir y en orden alfabético, porque una palabra suelta no dice nada del aprendiz, pero las palabras en el orden de la frase sí podrían revelar lo que escribió.
+  \item[Versionado.] Todas las rutas empiezan por \texttt{/api/v1}. Ese número es la versión del \emph{contrato} de la API, y solo cambia si un cambio obliga a modificar a los clientes. No hay que confundirlo con la versión del \emph{contenido} (42, 43\ldots), que sube cada vez que el equipo publica y viaja en los datos, no en la URL.
 \end{description}
 
-Los códigos de estado:
+Por último, cada código de estado tiene un uso preciso:
 
 \begin{center}
 \small
@@ -591,49 +598,71 @@ Los códigos de estado:
 \hline
 Código & Cuándo \\
 \hline
-200 & Una lectura, o un \texttt{PATCH} que devuelve el recurso cambiado. \\
+200 & Una consulta, o un \texttt{PATCH} que devuelve el recurso cambiado. \\
 201 & Se creó un recurso: una pieza, una frase, una lectura o una versión. Va con el header \texttt{Location}, que apunta al recurso nuevo. \\
-204 & Se borró una frase en borrador. No hay nada que devolver. \\
-304 & El paquete no cambió desde la copia de la aplicación (\texttt{If-None-Match}); no se descarga otra vez. \\
-400 & El cuerpo o la consulta no cumplen el formato: un campo que no corresponde al tipo de la pieza, \texttt{size=500}, una fusión entre piezas de tipos distintos. \\
+204 & Se borró una frase en borrador; no hay nada que devolver. \\
+304 & El paquete no cambió desde la copia que tiene la aplicación (\texttt{If-None-Match}), así que no se descarga otra vez. \\
+400 & El cuerpo o la consulta no cumplen el formato: un campo que no corresponde al tipo de la pieza, \texttt{size=500} o una fusión entre piezas de tipos distintos. \\
 404 & El recurso no existe. \\
-409 & La petición tiene el formato correcto, pero choca con el estado del contenido: el identificador ya se usó, la pieza ya existe, la frase ya está publicada. \\
+409 & La petición tiene el formato correcto, pero choca con el estado del contenido: el identificador ya se usó, la pieza ya existe o la frase ya está publicada. \\
 401, 403 & Falta el token de editor, o el token no tiene ese rol. \\
-429 & Una IP superó el límite de peticiones; el header \texttt{Retry-After} dice cuándo reintentar. \\
+429 & Una IP superó el límite de peticiones; el header \texttt{Retry-After} indica cuándo reintentar. \\
 \hline
 \end{tabular}
 \end{center}
 
-La diferencia entre \texttt{400} y \texttt{409} es la que más se presta a confusión. El \texttt{400} se decide mirando solo la petición; el \texttt{409}, mirando lo que ya hay en el servidor. Crear la pieza \texttt{kanji-5b66} es una petición válida, y solo choca porque ese identificador ya existe.
+De estos códigos, el \texttt{400} y el \texttt{409} son los que más se confunden. La diferencia está en qué hay que mirar para decidir: el \texttt{400} se decide con la petición sola, mientras que el \texttt{409} depende de lo que ya existe en el servidor. Por ejemplo, crear la pieza \texttt{kanji-5b66} es una petición bien formada; solo choca porque ese identificador ya está en uso.
 
 \subsection*{(c) Una acción sin verbo en la URL}
 
-Musubi no presta equipos, así que no hay un préstamo que renovar. La acción equivalente es \textbf{fusionar una pieza duplicada}. Por regla, cada contenido tiene un solo código, y los duplicados se previenen al crear: \texttt{POST /piezas} responde \texttt{409} si ya hay una pieza activa del mismo tipo con la misma forma y las mismas lecturas. Aun así, puede colarse uno. Por ejemplo, el equipo escribe a mano la palabra りんご (\texttt{vocab-p-0007}), y después importa la entrada de JMdict de 林檎 (\texttt{vocab-1555480}), que es la misma palabra con sus kanji. Si hay aprendices con progreso en las dos, borrar la sobrante les haría perder ese progreso, y retirarla les dejaría la palabra como nueva. La pieza sobrante tiene que fusionarse en la otra.
+Como Musubi no presta equipos, no hay un préstamo que renovar. La acción equivalente en este dominio es \textbf{fusionar una pieza duplicada}, y para entenderla hay que ver primero por qué aparecería un duplicado.
 
-Alternativas:
+En principio, no debería haberlos. Cada contenido tiene un solo código, y \texttt{POST /piezas} responde \texttt{409} si ya existe una pieza activa del mismo tipo, con la misma forma y la misma pronunciación. Aun así, alguno puede colarse. Supongamos que el equipo escribe a mano la palabra りんご (manzana) como \texttt{vocab-p-0007}, y después importa del diccionario JMdict la entrada 林檎 (\texttt{vocab-1555480}), que es la misma palabra escrita con kanji. Como las formas son distintas, la validación no las detecta, y para cuando alguien lo nota, ya hay aprendices con progreso en las dos.
+
+Borrar la pieza sobrante no es una opción, porque esos aprendices perderían su progreso. Retirarla tampoco basta: el progreso quedaría en una pieza que ya no aparece, y 林檎 se les mostraría como nueva. Lo que hace falta es fusionarla, es decir, declarar que \texttt{vocab-p-0007} es la misma pieza que \texttt{vocab-1555480}, para que cada teléfono pase el progreso de una a la otra.
+
+Esa acción se puede modelar de dos maneras sin poner un verbo en la URL:
 
 \begin{enumerate}
-  \item \textbf{Un cambio de estado.} \texttt{PATCH /piezas/vocab-p-0007} con \texttt{\{"tipo": "vocabulario", "estado": "fusionada", "reemplazadaPor": "vocab-1555480"\}}. La fusión es un estado de la pieza sobrante.
-  \item \textbf{Un recurso nuevo.} \texttt{POST /fusiones} con \texttt{\{"origen": "vocab-p-0007", "destino": "vocab-1555480", "motivo": "\ldots"\}}. La fusión es un objeto con su propio identificador, que se puede consultar en \texttt{/fusiones/\{id\}} y cancelar con \texttt{DELETE} antes de publicarla.
+  \item \textbf{Como un cambio de estado.} La fusión es un estado de la pieza sobrante, que se cambia con \texttt{PATCH}:
+\begin{lstlisting}
+PATCH /api/v1/piezas/vocab-p-0007
+{
+  "tipo": "vocabulario",
+  "estado": "fusionada",
+  "reemplazadaPor": "vocab-1555480"
+}
+\end{lstlisting}
+  \item \textbf{Como un recurso nuevo.} La fusión es un objeto con identificador propio, que se crea con \texttt{POST}, se consulta en \texttt{/fusiones/\{id\}} y se cancela con \texttt{DELETE} antes de publicarla:
+\begin{lstlisting}
+POST /api/v1/fusiones
+{
+  "origen": "vocab-p-0007",
+  "destino": "vocab-1555480",
+  "motivo": "..."
+}
+\end{lstlisting}
 \end{enumerate}
 
-Elegí la \textbf{primera}. La segunda conviene cuando la acción tiene vida propia: se consulta, se cancela, tiene su historia. Así sería un préstamo, que se solicita, se aprueba, se renueva y se devuelve. Aquí, los duplicados son raros, porque se previenen al crear, y no justifican mantener un recurso con sus operaciones. Lo que la aplicación necesita saber de una fusión ya viaja en la versión que la publica.
+Elegí la primera. Un recurso propio se justifica cuando la acción tiene vida propia, es decir, cuando se consulta, se cancela o tiene una historia. Un préstamo sería un buen ejemplo, porque se solicita, se aprueba, se renueva y se devuelve. Una fusión, en cambio, es rara, porque los duplicados se previenen al crear, y lo único que la aplicación necesita saber de ella ya viaja en la versión que la publica. Mantener un recurso con sus operaciones para algo tan puntual complicaría la API sin ningún beneficio.
 
-El mismo criterio da el resultado contrario al publicar. Publicar se modela como un recurso, \texttt{POST /versiones}, y no como un cambio de estado de cada borrador, porque una versión sí tiene vida propia: tiene número, la aplicación la consulta (\texttt{GET /versiones?desde=41}) y lista lo que cambió.
+El mismo criterio lleva al resultado contrario en la publicación. Publicar se modela como un recurso, \texttt{POST /versiones}, y no como un cambio de estado de cada borrador, porque una versión sí tiene vida propia: tiene un número, la aplicación la consulta con \texttt{GET /versiones?desde=41} y su contenido es la lista de lo que cambió.
 
-La fusión, además, tiene que ser determinista. El progreso está en cada teléfono y no en el servidor, así que el servidor no puede moverlo: solo puede avisar, y cada teléfono aplica el aviso por su cuenta. Para que todos terminen igual:
+Queda un último problema. El progreso está en cada teléfono, así que el servidor no puede moverlo: solo puede avisar que hubo una fusión, y cada teléfono la aplica por su cuenta cuando descarga los cambios. Para que todos los teléfonos lleguen al mismo resultado, sin importar cuándo se conecten, la fusión sigue cinco reglas:
 
 \begin{enumerate}
   \item Solo se fusiona una pieza publicada en otra publicada del mismo tipo.
-  \item La fusión se aplica al publicar la versión, y es irreversible: el progreso combinado ya no se puede separar.
-  \item \texttt{GET /versiones} lista las fusiones de cada versión en orden, y la aplicación aplica las versiones en orden. Un teléfono que viene de la versión 30 y otro que viene de la 41 llegan al mismo estado.
+  \item La fusión se aplica al publicar la versión, y es irreversible, porque el progreso combinado ya no se puede separar.
+  \item \texttt{GET /versiones} lista las fusiones de cada versión en orden, y la aplicación aplica las versiones en orden. Así, un teléfono que viene de la versión 30 y otro que viene de la 41 llegan al mismo estado.
   \item \texttt{reemplazadaPor} siempre apunta a la última pieza de la cadena: si A se fusionó en B y después B en C, el de A es C.
   \item La aplicación combina los dos progresos con una regla fija: en cada grado queda el más alto, el próximo repaso queda en la fecha más cercana y los errores recurrentes se juntan. Aplicar dos veces la misma fusión no cambia nada, porque la pieza sobrante ya no tiene progreso.
 \end{enumerate}
 
 \subsection*{(d) Formato único de error}
 
-Todos los errores usan el formato Problem Details (RFC 9457). Su tipo de contenido es \texttt{application/problem+json}, distinto del \texttt{application/json} de las respuestas exitosas, así que el cliente sabe que recibió un error antes de leer el cuerpo. El equivalente de ``el equipo ya está prestado'' es fusionar una pieza que ya se fusionó:
+Todos los errores de la API usan el mismo formato, Problem Details (RFC 9457). Además, se envían con el tipo de contenido \texttt{application/problem+json}, distinto del \texttt{application/json} de las respuestas exitosas, de modo que el cliente sabe que recibió un error antes de leer el cuerpo.
+
+El ejemplo de la guía, ``el equipo ya está prestado'', es una petición válida que choca con el estado del recurso. En Musubi, el caso equivalente es intentar fusionar una pieza que ya se fusionó, y la respuesta es esta:
 
 \begin{lstlisting}
 HTTP/1.1 409 Conflict
@@ -648,46 +677,50 @@ Content-Type: application/problem+json
 }
 \end{lstlisting}
 
+Cada campo cumple una función:
+
 \begin{description}
   \raggedright
-  \item[\texttt{type}.] Identifica el tipo de problema con una URI. El cliente decide qué hacer según \texttt{type}, no según el texto, que puede cambiar o traducirse.
-  \item[\texttt{title}.] Resumen del tipo de problema: es el mismo para todos sus casos.
-  \item[\texttt{status}.] El código HTTP, repetido en el cuerpo para quien solo guarde el cuerpo, como un registro de errores.
-  \item[\texttt{detail}.] Lo que pasó en este caso: qué pieza, en qué versión.
-  \item[\texttt{instance}.] La ruta de la petición que falló.
+  \item[\texttt{type}.] Identifica el tipo de problema con una URI. Por eso el cliente decide qué hacer según \texttt{type}, y no según el texto, que puede cambiar o traducirse.
+  \item[\texttt{title}.] Resume el tipo de problema, así que es el mismo cada vez que ocurre.
+  \item[\texttt{status}.] Repite el código HTTP en el cuerpo, por si el cuerpo se guarda o se reenvía sin los headers, por ejemplo en un registro de errores.
+  \item[\texttt{detail}.] Explica este caso en particular: qué pieza y en qué versión.
+  \item[\texttt{instance}.] Indica la ruta de la petición que falló.
 \end{description}
 
-La especificación define once tipos de problema, cada uno con su ejemplo. Seis son conflictos (\texttt{409}): \texttt{identificador-usado}, \texttt{pieza-duplicada}, \texttt{pieza-fusionada}, \texttt{pieza-en-uso}, \texttt{destino-inactivo} y \texttt{frase-publicada}; los demás cubren \texttt{400}, \texttt{401}, \texttt{403}, \texttt{404} y \texttt{429}. El mismo formato sirve para todos, así que la aplicación los maneja con un solo código.
+En total, la especificación define 14 tipos de problema, cada uno con su ejemplo. Ocho son conflictos (\texttt{409}), como \texttt{identificador-usado}, \texttt{pieza-duplicada}, \texttt{pieza-en-uso} y \texttt{frase-publicada}; los demás cubren los códigos \texttt{400}, \texttt{401}, \texttt{403}, \texttt{404} y \texttt{429}. Como todos comparten el formato, la aplicación los maneja con un solo código, y solo necesita distinguir el \texttt{type}.
 
 \subsection*{(e) Documentación con OpenAPI}
 
-La especificación está en \texttt{openapi.yaml}, en la raíz del repositorio, en OpenAPI 3.0.3. Swagger Editor la carga sin errores, y lo comprobé también con Redocly CLI, que revisa además las buenas prácticas, y con swagger-parser, que resuelve todas las referencias. Ninguno da errores ni advertencias. Contiene:
+La especificación está en \texttt{openapi.yaml}, en la raíz del repositorio, y usa OpenAPI 3.0.3. Swagger Editor la carga sin errores. Además, la validé con Redocly CLI, que también revisa buenas prácticas, y con swagger-parser, que resuelve todas las referencias; ninguna de las dos herramientas reporta errores ni advertencias. La especificación contiene:
 
 \begin{itemize}
-  \item Las 19 operaciones, con sus parámetros, cuerpos y todas sus respuestas.
-  \item 31 esquemas en \texttt{components/schemas}. \texttt{Pieza} es un \texttt{oneOf} con discriminador por \texttt{tipo}: cada tipo (Kana, Kanji, Vocabulario, Gramatica) tiene sus campos, y los cambios de un \texttt{PATCH} se validan igual. Los campos que asigna el servidor, como \texttt{estado} y \texttt{version}, son \texttt{readOnly}, así que no aparecen en los cuerpos de las peticiones.
-  \item Ejemplos en todas las respuestas, con datos reales: los identificadores de vocabulario son entradas de JMdict, verificadas en el diccionario.
-  \item La seguridad: lectura pública (\texttt{security: []}) y escritura con un token \emph{bearer} de editor.
-  \item Una descripción general con las reglas que no caben en un esquema: los dos clientes, las dos versiones, un solo código por contenido y las reglas de los duplicados.
+  \item Las 19 operaciones, con sus parámetros, sus cuerpos y todas sus respuestas posibles.
+  \item 31 esquemas en \texttt{components/schemas}. El principal es \texttt{Pieza}, que se define con \texttt{oneOf} y un discriminador por \texttt{tipo}. Así, cada tipo de pieza (Kana, Kanji, Vocabulario, Gramatica) tiene sus propios campos, y los cambios que recibe un \texttt{PATCH} se validan de la misma forma. Los campos que asigna el servidor, como \texttt{estado} y \texttt{version}, se marcan \texttt{readOnly}, de modo que no aparecen en los cuerpos de las peticiones.
+  \item Ejemplos en todas las respuestas, con datos reales: los identificadores de vocabulario corresponden a entradas de JMdict, verificadas en el diccionario.
+  \item La seguridad de cada operación: la lectura es pública (\texttt{security: []}) y la escritura exige un token \emph{bearer} de editor.
+  \item Una descripción general con las reglas que no caben en un esquema: los dos clientes, las dos versiones, el código único de cada contenido y las reglas de los duplicados.
 \end{itemize}
+
+La figura 31 muestra la documentación que genera Swagger Editor a partir del archivo.
 
 \captura{ej4-e-swagger.png}{Figura 31. La documentación generada por Swagger Editor.}
 
 \subsection*{(f) Mock Server}
 
-Importé \texttt{openapi.yaml} en Postman como colección, con una carpeta por etiqueta, y creé sobre ella un Mock Server público y sin environment: \url{https://ce86bffd-cbec-4a5c-a615-217ca218cafe.mock.pstmn.io}. Postman convierte los ejemplos de la especificación en respuestas guardadas de cada petición, y el mock responde con ellas.
-
-El mock conserva el prefijo \texttt{/api/v1} del servidor real. \texttt{GET /api/v1/piezas/kanji-5b66} responde \texttt{200} con el kanji 学; sin el prefijo, la misma petición responde \texttt{404} con \texttt{mockRequest\allowbreak NotFound\allowbreak Error}, porque no coincide con ningún ejemplo. Así, para pasar del mock al servidor de verdad, la aplicación solo cambia el \emph{host}. En la colección, ese cambio es una variable: \texttt{baseUrl} vale la URL del mock más \texttt{/api/v1}. Hay que trabajar sin environment, porque el environment \texttt{Lab4-00} también define \texttt{baseUrl}, para JSONPlaceholder, y en Postman la variable del environment le gana a la de la colección.
+Para crear el mock, importé \texttt{openapi.yaml} en Postman como una colección, con una carpeta por etiqueta. Al importarla, Postman convierte los ejemplos de la especificación en respuestas guardadas de cada petición. Sobre esa colección creé un Mock Server público y sin environment, que responde con esas respuestas guardadas en \url{https://ce86bffd-cbec-4a5c-a615-217ca218cafe.mock.pstmn.io} (figura 32).
 
 \captura{ej4-f-mock.png}{Figura 32. El Mock Server, público y asociado a la colección.}
 
+El mock conserva el prefijo \texttt{/api/v1} del servidor real. Por ejemplo, \texttt{GET /api/v1/piezas/kanji-5b66} responde \texttt{200} con el kanji 学 (figura 33), mientras que la misma petición sin el prefijo responde \texttt{404} con \texttt{mockRequest\allowbreak NotFound\allowbreak Error}, porque no coincide con ningún ejemplo. Esto tiene una ventaja práctica: el día que exista el servidor, la aplicación solo tiene que cambiar el \emph{host}. En la colección, ese cambio se reduce a la variable \texttt{baseUrl}, que hoy vale la URL del mock seguida de \texttt{/api/v1}. Para que funcione hay que trabajar sin environment, porque \texttt{Lab4-00} también define \texttt{baseUrl}, para JSONPlaceholder, y en Postman la variable del environment tiene prioridad sobre la de la colección.
+
 \captura{ej4-f-peticion.png}{Figura 33. \texttt{GET /piezas/kanji-5b66} contra el mock: el ejemplo de la especificación.}
 
-El mock también sirve para los errores. Con el header \texttt{x-mock-response-code: 409}, el \texttt{PATCH} de una pieza devuelve el Problem Details de ``la pieza ya fue fusionada'', tal como está en la especificación. Así, la aplicación puede programar el manejo de cada error antes de que el servidor sepa producirlo.
+Además, el mock no solo devuelve respuestas exitosas. Con el header \texttt{x-mock-response-code}, el cliente elige qué respuesta quiere recibir. Por ejemplo, con \texttt{409}, el \texttt{PATCH} de una pieza devuelve el Problem Details de ``la pieza ya fue fusionada'', tal como está en la especificación (figura 34). De este modo, la aplicación puede programar el manejo de cada error antes de que el servidor sepa producirlo.
 
 \captura{ej4-f-error.png}{Figura 34. El \texttt{409} pedido al mock con \texttt{x-mock-response-code}.}
 
-Con esto, la aplicación Android puede programar la descarga de paquetes, la búsqueda de palabras, la combinación de progreso de una fusión y el manejo de cada error, sin que exista el servidor. Para un equipo con frontend, móvil y backend en paralelo, la ventaja es que la especificación se vuelve el punto de acuerdo. Cada parte trabaja contra el contrato, no contra la implementación de otra, y nadie espera a nadie. Si algo del contrato no sirve, se descubre al principio, cuando cambiar el YAML cuesta poco, y no al integrar, cuando ya hay código de los dos lados. Y como el mock sale del mismo \texttt{openapi.yaml}, cuando el contrato cambia basta con volver a importarlo.
+En resumen, con el mock la aplicación Android puede programar desde ya la descarga de paquetes, la búsqueda de palabras, la combinación del progreso tras una fusión y el manejo de los errores, aunque el servidor todavía no exista. Para un equipo con frontend, móvil y backend en paralelo, esa es la principal ventaja: la especificación se convierte en el punto de acuerdo entre todos. Cada parte trabaja contra el contrato y no contra la implementación de otra, de modo que nadie tiene que esperar a nadie. Si algo del contrato no funciona, además, se descubre al principio, cuando corregir el YAML cuesta poco, y no al integrar, cuando ya hay código escrito de ambos lados. Y como el mock sale del mismo \texttt{openapi.yaml}, cada vez que el contrato cambia basta con volver a importarlo.
 
 \section*{Entrega}
 
