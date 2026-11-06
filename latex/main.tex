@@ -675,10 +675,18 @@ La especificación está en \texttt{openapi.yaml}, en la raíz del repositorio, 
 
 \subsection*{(f) Mock Server}
 
-Con un mock, la aplicación Android puede programar la descarga de paquetes, la búsqueda de palabras y el manejo de cada error antes de que exista el servidor: el mock responde con los ejemplos de la especificación. Para un equipo con frontend, móvil y backend en paralelo, la ventaja es que la especificación se vuelve el punto de acuerdo. Cada parte trabaja contra el contrato, no contra la implementación de otra, y nadie espera a nadie. Si algo del contrato no sirve, se descubre al principio, cuando cambiar el YAML cuesta poco, y no al integrar, cuando ya hay código de los dos lados.
+Importé \texttt{openapi.yaml} en Postman como colección, con una carpeta por etiqueta, y creé sobre ella un Mock Server público y sin environment: \url{https://ce86bffd-cbec-4a5c-a615-217ca218cafe.mock.pstmn.io}. Postman convierte los ejemplos de la especificación en respuestas guardadas de cada petición, y el mock responde con ellas.
 
-\captura{ej4-f-mock.png}{Figura 32. El Mock Server creado en Postman a partir de \texttt{openapi.yaml}.}
+El mock conserva el prefijo \texttt{/api/v1} del servidor real. \texttt{GET /api/v1/piezas/kanji-5b66} responde \texttt{200} con el kanji 学; sin el prefijo, la misma petición responde \texttt{404} con \texttt{mockRequest\allowbreak NotFound\allowbreak Error}, porque no coincide con ningún ejemplo. Así, para pasar del mock al servidor de verdad, la aplicación solo cambia el \emph{host}. En la colección, ese cambio es una variable: \texttt{baseUrl} vale la URL del mock más \texttt{/api/v1}. Hay que trabajar sin environment, porque el environment \texttt{Lab4-00} también define \texttt{baseUrl}, para JSONPlaceholder, y en Postman la variable del environment le gana a la de la colección.
 
-\captura{ej4-f-peticion.png}{Figura 33. Una petición contra el mock.}
+\captura{ej4-f-mock.png}{Figura 32. El Mock Server, público y asociado a la colección.}
+
+\captura{ej4-f-peticion.png}{Figura 33. \texttt{GET /piezas/kanji-5b66} contra el mock: el ejemplo de la especificación.}
+
+El mock también sirve para los errores. Con el header \texttt{x-mock-response-code: 409}, el \texttt{PATCH} de una pieza devuelve el Problem Details de ``la pieza ya fue fusionada'', tal como está en la especificación. Así, la aplicación puede programar el manejo de cada error antes de que el servidor sepa producirlo.
+
+\captura{ej4-f-error.png}{Figura 34. El \texttt{409} pedido al mock con \texttt{x-mock-response-code}.}
+
+Con esto, la aplicación Android puede programar la descarga de paquetes, la búsqueda de palabras, la combinación de progreso de una fusión y el manejo de cada error, sin que exista el servidor. Para un equipo con frontend, móvil y backend en paralelo, la ventaja es que la especificación se vuelve el punto de acuerdo. Cada parte trabaja contra el contrato, no contra la implementación de otra, y nadie espera a nadie. Si algo del contrato no sirve, se descubre al principio, cuando cambiar el YAML cuesta poco, y no al integrar, cuando ya hay código de los dos lados. Y como el mock sale del mismo \texttt{openapi.yaml}, cuando el contrato cambia basta con volver a importarlo.
 
 \end{document}
