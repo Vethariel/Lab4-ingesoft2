@@ -1,0 +1,839 @@
+{
+  "info": {
+    "_postman_id": "51b0de71-7b0e-46ae-9592-bf00de36dbbf",
+    "name": "Lab4-00",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "59412829"
+  },
+  "item": [
+    {
+      "name": "Ejercicio 0",
+      "item": [
+        {
+          "name": "0a - GET con parámetros",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{httpbinUrl}}/get?curso=seii&grupo=3",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "get"
+              ],
+              "query": [
+                {
+                  "key": "curso",
+                  "value": "seii"
+                },
+                {
+                  "key": "grupo",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0b - Headers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo",
+                "value": "{{equipo}}"
+              }
+            ],
+            "url": {
+              "raw": "{{httpbinUrl}}/get?curso=seii&grupo=3",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "get"
+              ],
+              "query": [
+                {
+                  "key": "curso",
+                  "value": "seii"
+                },
+                {
+                  "key": "grupo",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0c - POST JSON",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipo\": \"Musubi Japan\",\n  \"grupo\": 0,\n  \"integrantes\": [\"Daniel Alonso Gracia Pinto\"],\n  \"proyecto\": \"App móvil para aprender japonés\"\n}\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{httpbinUrl}}/post",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "post"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0c - POST Text",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "hola equipo",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{httpbinUrl}}/post",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "post"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0d - 201",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{httpbinUrl}}/status/201",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "status",
+                "201"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0d - 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{httpbinUrl}}/status/404",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "status",
+                "404"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "0d - 500",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{httpbinUrl}}/status/500",
+              "host": [
+                "{{httpbinUrl}}"
+              ],
+              "path": [
+                "status",
+                "500"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ejercicio 1",
+      "item": [
+        {
+          "name": "1a - GET /users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Responde en menos de 1 s\", () => pm.expect(pm.response.responseTime).to.be.below(1000));\npm.test(\"Devuelve una lista de 10 usuarios\", () => {\n    const usuarios = pm.response.json();\n    pm.expect(usuarios).to.be.an(\"array\").that.has.lengthOf(10);\n    pm.expect(usuarios[0]).to.have.property(\"email\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - GET /users/{{userId}}/posts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Todos los posts son del usuario pedido\", () => {\n    const userId = Number(pm.environment.get(\"userId\"));\n    const posts = pm.response.json();\n    pm.expect(posts).to.have.lengthOf(10);\n    posts.forEach(p => pm.expect(p.userId).to.eql(userId));\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/posts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "posts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - GET /posts?userId={{userId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"El filtro deja solo los posts del usuario pedido\", () => {\n    const userId = Number(pm.environment.get(\"userId\"));\n    const posts = pm.response.json();\n    pm.expect(posts).to.have.lengthOf(10);\n    posts.forEach(p => pm.expect(p.userId).to.eql(userId));\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts?userId={{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - POST /posts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 201\", () => pm.response.to.have.status(201));\npm.test(\"Indica dónde quedó el recurso\", () => pm.response.to.have.header(\"Location\"));\npm.test(\"Devuelve el post con un id nuevo\", () => {\n    const post = pm.response.json();\n    pm.expect(post.title).to.eql(\"Musubi Japan\");\n    pm.expect(post).to.have.property(\"id\");\n    pm.environment.set(\"nuevoId\", post.id);\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"Musubi Japan\", \"body\": \"Lab 4\", \"userId\": {{userId}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/posts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1c - GET /posts/{{nuevoId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El post creado no existe: 404\", () => pm.response.to.have.status(404));\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{nuevoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{nuevoId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - PUT /posts/{{postId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Devuelve el post reemplazado\", () => {\n    const post = pm.response.json();\n    pm.expect(post.title).to.eql(\"Título nuevo\");\n    pm.expect(post.body).to.eql(\"Cuerpo nuevo\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\": 1, \"title\": \"Título nuevo\", \"body\": \"Cuerpo nuevo\", \"userId\": {{userId}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1d - PUT sin title",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El post queda sin title\", () => pm.expect(pm.response.json()).to.not.have.property(\"title\"));\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\": 1, \"body\": \"Cuerpo nuevo\", \"userId\": {{userId}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - PATCH /posts/{{postId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Cambia el título y conserva el resto\", () => {\n    const post = pm.response.json();\n    pm.expect(post.title).to.eql(\"Solo cambia el título\");\n    pm.expect(post.body).to.include(\"quia et suscipit\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"Solo cambia el título\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - DELETE /posts/{{postId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"El cuerpo está vacío\", () => pm.expect(pm.response.json()).to.eql({}));\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1a - GET /posts/9999",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 404\", () => pm.response.to.have.status(404));\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "9999"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ejercicio 2",
+      "item": [
+        {
+          "name": "2 - REST Countries v3.1 descontinuada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tras la redirección responde 200\", () => pm.response.to.have.status(200));\npm.test(\"Avisa que la versión está descontinuada\", () => {\n    const respuesta = pm.response.json();\n    pm.expect(respuesta.success).to.eql(false);\n    pm.expect(respuesta.errors[0].message).to.include(\"deprecated\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{restCountriesUrl}}/name/wakanda?fields=name,capital,population,latlng",
+              "host": [
+                "{{restCountriesUrl}}"
+              ],
+              "path": [
+                "name",
+                "wakanda"
+              ],
+              "query": [
+                {
+                  "key": "fields",
+                  "value": "name,capital,population,latlng"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2b - GET countries.dev /name/colombia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Trae Colombia con capital, población y coordenadas\", () => {\n    const [pais] = pm.response.json();\n    pm.expect(pais.name).to.eql(\"Colombia\");\n    pm.expect(pais.capital).to.eql(\"Bogotá\");\n    pm.expect(pais.population).to.be.a(\"number\");\n    pm.expect(pais.latlng).to.have.lengthOf(2);\n    pm.environment.set(\"lat\", pais.latlng[0]);\n    pm.environment.set(\"lon\", pais.latlng[1]);\n});\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{countriesDevUrl}}/name/colombia?fields=name,capital,population,latlng",
+              "host": [
+                "{{countriesDevUrl}}"
+              ],
+              "path": [
+                "name",
+                "colombia"
+              ],
+              "query": [
+                {
+                  "key": "fields",
+                  "value": "name,capital,population,latlng"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2b - GET Open-Meteo en las coordenadas del país",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Trae temperatura y viento actuales\", () => {\n    const actual = pm.response.json().current;\n    pm.expect(actual.temperature_2m).to.be.a(\"number\");\n    pm.expect(actual.wind_speed_10m).to.be.a(\"number\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{openMeteoUrl}}/forecast?latitude={{lat}}&longitude={{lon}}&current=temperature_2m,wind_speed_10m",
+              "host": [
+                "{{openMeteoUrl}}"
+              ],
+              "path": [
+                "forecast"
+              ],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "{{lat}}"
+                },
+                {
+                  "key": "longitude",
+                  "value": "{{lon}}"
+                },
+                {
+                  "key": "current",
+                  "value": "temperature_2m,wind_speed_10m"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2c - GET countries.dev /name/wakanda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El país no existe: 404\", () => pm.response.to.have.status(404));\npm.test(\"El cuerpo es texto plano, no JSON\", () => {\n    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/plain\");\n    pm.expect(pm.response.text()).to.eql(\"Country not found\");\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{countriesDevUrl}}/name/wakanda",
+              "host": [
+                "{{countriesDevUrl}}"
+              ],
+              "path": [
+                "name",
+                "wakanda"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ejercicio 3",
+      "item": [
+        {
+          "name": "3a - REST GET countries.dev /alpha/co",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Trae nombre, capital y moneda, y mucho más\", () => {\n    const pais = pm.response.json();\n    pm.expect(pais.name).to.eql(\"Colombia\");\n    pm.expect(pais.capital).to.eql(\"Bogotá\");\n    pm.expect(pais.currencies[0].code).to.eql(\"COP\");\n    pm.expect(Object.keys(pais).length).to.be.above(10);\n    pm.environment.set(\"bytesRest\", pm.response.size().body);\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{countriesDevUrl}}/alpha/co",
+              "host": [
+                "{{countriesDevUrl}}"
+              ],
+              "path": [
+                "alpha",
+                "co"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3a - GraphQL country(code: \"CO\")",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Trae solo los campos pedidos\", () => {\n    const pais = pm.response.json().data.country;\n    pm.expect(pais).to.have.all.keys(\"name\", \"capital\", \"currency\", \"languages\");\n    pm.expect(pais.name).to.eql(\"Colombia\");\n    pm.expect(pais.currency).to.eql(\"COP\");\n});\npm.test(\"Pesa menos que la respuesta REST\", () => {\n    const bytesRest = Number(pm.environment.get(\"bytesRest\"));\n    pm.expect(pm.response.size().body).to.be.below(bytesRest);\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query {\n  country(code: \"CO\") { name capital currency languages { name } }\n}\n"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlUrl}}",
+              "host": [
+                "{{graphqlUrl}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3b - SOAP FullCountryInfo CO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Responde en XML\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/xml\"));\npm.test(\"Responde un sobre SOAP con Colombia, su capital y su moneda\", () => {\n    const xml = pm.response.text();\n    pm.expect(xml).to.include(\"<soap:Envelope\");\n    pm.expect(xml).to.include(\"<soap:Body>\");\n    pm.expect(xml).to.include(\"<m:sName>Colombia</m:sName>\");\n    pm.expect(xml).to.include(\"<m:sCapitalCity>Bogota</m:sCapitalCity>\");\n    pm.expect(xml).to.include(\"<m:sCurrencyISOCode>COP</m:sCurrencyISOCode>\");\n});\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soap:Body>\n    <FullCountryInfo xmlns=\"http://www.oorsprong.org/websamples.countryinfo\">\n      <sCountryISOCode>CO</sCountryISOCode>\n    </FullCountryInfo>\n  </soap:Body>\n</soap:Envelope>\n",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{soapUrl}}",
+              "host": [
+                "{{soapUrl}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3b - SOAP WSDL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"El código es 200\", () => pm.response.to.have.status(200));\npm.test(\"Publica el contrato con la operación FullCountryInfo\", () => {\n    const wsdl = pm.response.text();\n    pm.expect(wsdl).to.include(\"definitions\");\n    pm.expect(wsdl).to.include('operation name=\"FullCountryInfo\"');\n});"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "\n"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{soapWsdlUrl}}",
+              "host": [
+                "{{soapWsdlUrl}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3d - POST webhook pago.aprobado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"webhook.site recibió el aviso: 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"evento\": \"pago.aprobado\", \"pedidoId\": 123}\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{webhookUrl}}",
+              "host": [
+                "{{webhookUrl}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ejercicio 4",
+      "item": []
+    }
+  ]
+}
