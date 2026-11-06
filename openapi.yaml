@@ -1,0 +1,1696 @@
+openapi: 3.0.3
+info:
+  title: API de contenidos de Musubi
+  version: 1.0.0
+  description: |
+    Catálogo de contenidos de Musubi, la aplicación para aprender japonés: kana, kanji,
+    vocabulario, gramática, frases, lecturas y la ruta sugerida.
+
+    La aplicación trae el kana y los primeros temas de la ruta, y descarga el resto cuando
+    tiene conexión: la ruta, el diccionario y los trazos por paquetes, y las lecturas una
+    por una. Después estudia sin red. El equipo de Musubi escribe los contenidos y los
+    publica por versiones.
+
+    **Dos tipos de cliente.** La aplicación solo lee, de forma anónima: sin token ni
+    cookies, porque leer contenido no necesita saber quién es el aprendiz. Cuando completa
+    las palabras de una frase propia, envía las formas sin repetir y en orden alfabético,
+    nunca en el orden de la frase. El equipo escribe con un token que tiene rol de editor.
+
+    **Límites.** Las operaciones públicas tienen un límite de peticiones por IP. Al
+    superarlo, la respuesta es `429` con el header `Retry-After`.
+
+    **Dos versiones.** `v1` en la ruta es la versión de la API. La versión del contenido
+    (42, 43...) cambia con cada publicación del equipo.
+
+    **Un solo código por contenido.** Cada pieza tiene un identificador definitivo, que
+    nunca se reutiliza ni se reemplaza por otro. No hay piezas provisionales: si a la
+    aplicación le falta una pieza, la espera hasta recibir la oficial. Una pieza publicada
+    no se borra: se retira, o se marca como fusionada si resultó ser un duplicado, y sigue
+    respondiendo para que la aplicación conserve el progreso del aprendiz.
+
+    **Duplicados.** Se previenen al crear: no puede haber dos piezas activas del mismo
+    tipo con la misma forma y las mismas lecturas. Si aun así aparece uno, el equipo marca
+    la pieza sobrante como `fusionada` y dice cuál la reemplaza. Para que todos los
+    teléfonos terminen igual:
+
+    1. Solo se fusiona una pieza publicada en otra publicada del mismo tipo.
+    2. La fusión se aplica al publicar la versión y es irreversible.
+    3. `GET /versiones` lista las fusiones de cada versión en el orden en que se aplican,
+       y la aplicación aplica las versiones en orden.
+    4. `reemplazadaPor` siempre apunta a la última pieza de la cadena: si A se fusionó en
+       B y después B en C, el de A es C.
+    5. La aplicación combina los dos progresos: en cada grado queda el más alto, el
+       próximo repaso queda en la fecha más cercana y los errores recurrentes se juntan.
+       Aplicar dos veces la misma fusión no cambia nada.
+
+    Los errores siguen el formato Problem Details (RFC 9457).
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+security: []
+servers:
+  - url: https://api.musubi.app/api/v1
+    description: Producción (dominio de ejemplo)
+tags:
+  - name: Paquetes
+    description: Lo que la aplicación descarga para estudiar sin conexión.
+  - name: Piezas
+    description: Kana, kanji, vocabulario y gramática.
+  - name: Frases
+    description: Enunciados que atan piezas.
+  - name: Ruta
+    description: El grupo sugerido, ordenado por temas.
+  - name: Lecturas
+    description: Textos para practicar. Se descargan uno por uno.
+  - name: Versiones
+    description: Publicaciones del contenido.
+
+paths:
+  /paquetes:
+    get:
+      tags: [Paquetes]
+      operationId: listarPaquetes
+      summary: Manifiesto de paquetes
+      description: |
+        Qué paquetes existen, de qué versión del contenido es cada uno, cuánto pesa y su
+        huella. La aplicación compara el manifiesto con lo que tiene y decide qué descargar
+        según su avance y el espacio libre.
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TipoPaquete'
+      responses:
+        '200':
+          description: El manifiesto.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manifiesto'
+              example:
+                versionContenido: 42
+                paquetes:
+                  - id: ruta-tema-07
+                    tipo: ruta
+                    version: 42
+                    bytes: 18432
+                    sha256: 9f2c4e1ab0d37c5e8f6a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6
+                  - id: diccionario-frec-5001-10000
+                    tipo: diccionario
+                    version: 40
+                    bytes: 1048576
+                    sha256: 3b7d0c9e8f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /paquetes/{paqueteId}:
+    get:
+      tags: [Paquetes]
+      operationId: descargarPaquete
+      summary: Descarga un paquete
+      description: |
+        El contenido de un paquete. Si la aplicación envía en `If-None-Match` la huella
+        que ya tiene y el paquete no cambió, la respuesta es `304` sin cuerpo.
+      parameters:
+        - $ref: '#/components/parameters/PaqueteId'
+        - name: If-None-Match
+          in: header
+          required: false
+          description: El `ETag` de la copia que la aplicación ya tiene.
+          schema:
+            type: string
+          example: '"42-ruta-tema-07"'
+      responses:
+        '200':
+          description: El paquete.
+          headers:
+            ETag:
+              description: Identifica esta versión del paquete.
+              schema:
+                type: string
+              example: '"42-ruta-tema-07"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paquete'
+              example:
+                id: ruta-tema-07
+                tipo: ruta
+                version: 42
+                piezas:
+                  - id: kanji-5b66
+                    tipo: kanji
+                    estado: publicada
+                    nivel: N5
+                    version: 42
+                    forma: 学
+                    onyomi: [ガク]
+                    kunyomi: [まな.ぶ]
+                    significados: [estudio, aprender]
+                    trazos: 8
+                frases:
+                  - id: frase-0071
+                    texto: わたしは学生です。
+                    traduccion: Soy estudiante.
+                    tema: 7
+                    estado: publicada
+                    piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+        '304':
+          description: El paquete no cambió; la copia de la aplicación sigue vigente.
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /versiones:
+    get:
+      tags: [Versiones]
+      operationId: listarVersiones
+      summary: Cambios desde una versión
+      description: |
+        Las versiones publicadas después de `desde`, con lo que cambió en cada una. La
+        aplicación aplica las fusiones a su progreso local: el progreso de la pieza de
+        origen pasa a la de destino.
+      parameters:
+        - name: desde
+          in: query
+          required: true
+          description: La última versión que la aplicación tiene.
+          schema:
+            type: integer
+            minimum: 0
+          example: 41
+      responses:
+        '200':
+          description: Las versiones posteriores, de la más antigua a la más nueva.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Version'
+              example:
+                - numero: 42
+                  publicadaEn: '2026-11-05T15:00:00Z'
+                  notas: Tema 7 completo y corrección de 学.
+                  cambios:
+                    creadas: [frase-0071, frase-0072]
+                    modificadas: [kanji-5b66]
+                    retiradas: []
+                    fusionadas:
+                      - origen: vocab-p-0007
+                        destino: vocab-1555480
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    post:
+      tags: [Versiones]
+      operationId: publicarVersion
+      summary: Publica los borradores
+      description: |
+        Publica todos los borradores como una versión nueva del contenido y regenera los
+        paquetes afectados.
+      security:
+        - editor: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionNueva'
+            example:
+              notas: Tema 7 completo y corrección de 学.
+      responses:
+        '201':
+          description: La versión publicada.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+              example:
+                numero: 43
+                publicadaEn: '2026-11-06T15:00:00Z'
+                notas: Tema 8.
+                cambios:
+                  creadas: [frase-0081]
+                  modificadas: []
+                  retiradas: []
+                  fusionadas: []
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: No hay borradores por publicar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://api.musubi.app/problemas/sin-cambios
+                title: No hay cambios por publicar
+                status: 409
+                detail: No hay borradores desde la versión 42.
+                instance: /api/v1/versiones
+
+  /versiones/{numero}:
+    get:
+      tags: [Versiones]
+      operationId: obtenerVersion
+      summary: Una versión publicada
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 42
+      responses:
+        '200':
+          description: La versión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+              example:
+                numero: 42
+                publicadaEn: '2026-11-05T15:00:00Z'
+                notas: Tema 7 completo y corrección de 学.
+                cambios:
+                  creadas: [frase-0071, frase-0072]
+                  modificadas: [kanji-5b66]
+                  retiradas: []
+                  fusionadas:
+                    - origen: vocab-p-0007
+                      destino: vocab-1555480
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /piezas:
+    get:
+      tags: [Piezas]
+      operationId: buscarPiezas
+      summary: Busca piezas
+      description: |
+        Busca y filtra el catálogo. Con `forma`, la aplicación completa las palabras de una
+        frase que escribió el aprendiz y que no están en sus paquetes; puede pedir varias a
+        la vez. Esta búsqueda es anónima y no se registra.
+      parameters:
+        - name: tipo
+          in: query
+          schema:
+            $ref: '#/components/schemas/TipoPieza'
+        - name: nivel
+          in: query
+          schema:
+            $ref: '#/components/schemas/Nivel'
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoPieza'
+        - name: q
+          in: query
+          description: Texto libre en la forma, la lectura o el significado.
+          schema:
+            type: string
+          example: estudio
+        - name: forma
+          in: query
+          description: Formas exactas, separadas por comas.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+          example: [食べる, 学生]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Una página de piezas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaPiezas'
+              example:
+                page: 1
+                size: 20
+                total: 2
+                items:
+                  - id: vocab-1358280
+                    tipo: vocabulario
+                    estado: publicada
+                    nivel: N5
+                    version: 38
+                    forma: 食べる
+                    lecturas: [たべる]
+                    significados: [comer]
+                    kanji: [kanji-98df]
+                  - id: vocab-1206900
+                    tipo: vocabulario
+                    estado: publicada
+                    nivel: N5
+                    version: 35
+                    forma: 学生
+                    lecturas: [がくせい]
+                    significados: [estudiante]
+                    kanji: [kanji-5b66, kanji-751f]
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    post:
+      tags: [Piezas]
+      operationId: crearPieza
+      summary: Crea una pieza en borrador
+      description: |
+        El equipo crea una pieza con un identificador estable: el punto de código para kana
+        y kanji, el número de entrada de JMdict para el vocabulario o uno propio con
+        prefijo `p`. Un identificador que ya existió no se puede usar, aunque esa pieza
+        esté retirada o fusionada. Tampoco se crea una pieza que ya existe: si hay una
+        activa del mismo tipo con la misma forma y las mismas lecturas, la respuesta es
+        `409` e indica cuál es.
+      security:
+        - editor: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pieza'
+            example:
+              id: kanji-751f
+              tipo: kanji
+              nivel: N5
+              forma: 生
+              onyomi: [セイ, ショウ]
+              kunyomi: [い.きる, う.まれる, なま]
+              significados: [vida, nacer, crudo]
+              trazos: 5
+      responses:
+        '201':
+          description: La pieza creada, en borrador.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pieza'
+              example:
+                id: kanji-751f
+                tipo: kanji
+                estado: borrador
+                nivel: N5
+                forma: 生
+                onyomi: [セイ, ショウ]
+                kunyomi: [い.きる, う.まれる, なま]
+                significados: [vida, nacer, crudo]
+                trazos: 5
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: |
+            El identificador ya existió, o ya hay una pieza activa del mismo tipo con la
+            misma forma y las mismas lecturas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              examples:
+                identificadorUsado:
+                  summary: El identificador ya existió
+                  value:
+                    type: https://api.musubi.app/problemas/identificador-usado
+                    title: El identificador ya existió
+                    status: 409
+                    detail: kanji-5b66 ya pertenece a la pieza 学. Los identificadores no se reutilizan.
+                    instance: /api/v1/piezas
+                piezaDuplicada:
+                  summary: La pieza ya existe con otro identificador
+                  value:
+                    type: https://api.musubi.app/problemas/pieza-duplicada
+                    title: La pieza ya existe
+                    status: 409
+                    detail: 林檎 (りんご) ya existe como vocab-1555480. Use esa pieza.
+                    instance: /api/v1/piezas
+
+  /piezas/{piezaId}:
+    get:
+      tags: [Piezas]
+      operationId: obtenerPieza
+      summary: Detalle de una pieza
+      description: |
+        Una pieza retirada o fusionada sigue respondiendo `200`. Si está fusionada,
+        `reemplazadaPor` indica la pieza que la reemplaza.
+      parameters:
+        - $ref: '#/components/parameters/PiezaId'
+      responses:
+        '200':
+          description: La pieza.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pieza'
+              examples:
+                publicada:
+                  summary: Kanji publicado
+                  value:
+                    id: kanji-5b66
+                    tipo: kanji
+                    estado: publicada
+                    nivel: N5
+                    version: 42
+                    forma: 学
+                    onyomi: [ガク]
+                    kunyomi: [まな.ぶ]
+                    significados: [estudio, aprender]
+                    trazos: 8
+                fusionada:
+                  summary: Vocabulario fusionado
+                  value:
+                    id: vocab-p-0007
+                    tipo: vocabulario
+                    estado: fusionada
+                    reemplazadaPor: vocab-1555480
+                    nivel: N5
+                    version: 42
+                    forma: りんご
+                    lecturas: [りんご]
+                    significados: [manzana]
+                    kanji: []
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    patch:
+      tags: [Piezas]
+      operationId: modificarPieza
+      summary: Corrige, retira o fusiona una pieza
+      description: |
+        Cambia solo los campos enviados, que dependen del tipo de la pieza. Si `tipo` no es
+        el de la pieza, o se envía un campo que ese tipo no tiene, la respuesta es `400`.
+
+        - `estado: retirada`: la pieza deja de aparecer en paquetes nuevos, pero sigue
+          respondiendo para que el progreso del aprendiz se conserve. No se puede retirar
+          una pieza que usan frases publicadas.
+        - `estado: fusionada` con `reemplazadaPor`: la pieza es un duplicado de otra. Al
+          publicar la versión, las frases que la usaban pasan a usar la que queda, y la
+          aplicación combina el progreso según las reglas de Duplicados.
+      security:
+        - editor: []
+      parameters:
+        - $ref: '#/components/parameters/PiezaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosPieza'
+            examples:
+              corregir:
+                summary: Corregir los significados
+                value:
+                  tipo: kanji
+                  significados: [estudio, aprender, ciencia]
+              retirar:
+                summary: Retirar la pieza
+                value:
+                  tipo: kanji
+                  estado: retirada
+              fusionar:
+                summary: Marcar un duplicado
+                value:
+                  tipo: vocabulario
+                  estado: fusionada
+                  reemplazadaPor: vocab-1555480
+      responses:
+        '200':
+          description: La pieza con los cambios, en borrador hasta la próxima publicación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pieza'
+              example:
+                id: kanji-5b66
+                tipo: kanji
+                estado: borrador
+                nivel: N5
+                version: 42
+                forma: 学
+                onyomi: [ガク]
+                kunyomi: [まな.ぶ]
+                significados: [estudio, aprender, ciencia]
+                trazos: 8
+        '400':
+          description: |
+            El cuerpo no corresponde al tipo de la pieza, o la fusión no es válida: falta
+            `reemplazadaPor`, apunta a la misma pieza o a una de otro tipo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://api.musubi.app/problemas/fusion-invalida
+                title: La fusión no es válida
+                status: 400
+                detail: vocab-p-0007 es vocabulario y kanji-5b66 es kanji. Solo se fusionan piezas del mismo tipo.
+                instance: /api/v1/piezas/vocab-p-0007
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: |
+            La pieza ya fue fusionada, se quiere retirar una pieza que usan frases
+            publicadas, o la pieza que la reemplazaría no está publicada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              examples:
+                yaFusionada:
+                  summary: La pieza ya fue fusionada
+                  value:
+                    type: https://api.musubi.app/problemas/pieza-fusionada
+                    title: La pieza ya fue fusionada
+                    status: 409
+                    detail: vocab-p-0007 ya se fusionó en vocab-1555480 en la versión 42. Una fusión no se deshace.
+                    instance: /api/v1/piezas/vocab-p-0007
+                enUso:
+                  summary: La pieza está en uso
+                  value:
+                    type: https://api.musubi.app/problemas/pieza-en-uso
+                    title: La pieza está en uso
+                    status: 409
+                    detail: kanji-5b66 aparece en 14 frases publicadas. Retire o cambie esas frases primero.
+                    instance: /api/v1/piezas/kanji-5b66
+                destinoInactivo:
+                  summary: La pieza que la reemplazaría no está publicada
+                  value:
+                    type: https://api.musubi.app/problemas/destino-inactivo
+                    title: El reemplazo no está publicado
+                    status: 409
+                    detail: vocab-1555480 está retirada. Una pieza solo se fusiona en otra publicada.
+                    instance: /api/v1/piezas/vocab-p-0007
+
+  /piezas/{piezaId}/frases:
+    get:
+      tags: [Piezas]
+      operationId: listarFrasesDePieza
+      summary: Frases en las que aparece una pieza
+      parameters:
+        - $ref: '#/components/parameters/PiezaId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Una página de frases publicadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaFrases'
+              example:
+                page: 1
+                size: 20
+                total: 1
+                items:
+                  - id: frase-0071
+                    texto: わたしは学生です。
+                    traduccion: Soy estudiante.
+                    tema: 7
+                    estado: publicada
+                    piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /ruta/temas:
+    get:
+      tags: [Ruta]
+      operationId: listarTemas
+      summary: Temas de la ruta sugerida
+      description: Los temas en orden, con el paquete que trae cada uno.
+      responses:
+        '200':
+          description: Los temas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tema'
+              example:
+                - orden: 7
+                  titulo: Presentarse
+                  paquete: ruta-tema-07
+                  frases: 12
+                - orden: 8
+                  titulo: En el salón de clase
+                  paquete: ruta-tema-08
+                  frases: 10
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /frases:
+    post:
+      tags: [Frases]
+      operationId: crearFrase
+      summary: Crea una frase en borrador
+      security:
+        - editor: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Frase'
+            example:
+              texto: わたしは学生です。
+              traduccion: Soy estudiante.
+              tema: 7
+              piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+      responses:
+        '201':
+          description: La frase creada, en borrador.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Frase'
+              example:
+                id: frase-0072
+                texto: わたしは学生です。
+                traduccion: Soy estudiante.
+                tema: 7
+                estado: borrador
+                piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: La frase ya está en el tema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://api.musubi.app/problemas/frase-duplicada
+                title: La frase ya está en el tema
+                status: 409
+                detail: El tema 7 ya tiene la frase わたしは学生です。 (frase-0071).
+                instance: /api/v1/frases
+
+  /frases/{fraseId}:
+    get:
+      tags: [Frases]
+      operationId: obtenerFrase
+      summary: Una frase con sus piezas
+      parameters:
+        - $ref: '#/components/parameters/FraseId'
+      responses:
+        '200':
+          description: La frase.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Frase'
+              example:
+                id: frase-0071
+                texto: わたしは学生です。
+                traduccion: Soy estudiante.
+                tema: 7
+                estado: publicada
+                piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    patch:
+      tags: [Frases]
+      operationId: modificarFrase
+      summary: Corrige o retira una frase
+      description: |
+        Cambia solo los campos enviados. El texto no cambia: una frase con otro texto es
+        otra frase. Con `estado: retirada`, la frase deja de aparecer en paquetes nuevos,
+        pero el aprendiz que ya la tiene la conserva.
+      security:
+        - editor: []
+      parameters:
+        - $ref: '#/components/parameters/FraseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosFrase'
+            examples:
+              corregir:
+                summary: Corregir la traducción
+                value:
+                  traduccion: Yo soy estudiante.
+              retirar:
+                summary: Retirar la frase
+                value:
+                  estado: retirada
+      responses:
+        '200':
+          description: La frase con los cambios, en borrador hasta la próxima publicación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Frase'
+              example:
+                id: frase-0071
+                texto: わたしは学生です。
+                traduccion: Yo soy estudiante.
+                tema: 7
+                estado: borrador
+                piezas: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Al cambiarla de tema, choca con una frase igual que ya está en el tema nuevo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://api.musubi.app/problemas/frase-duplicada
+                title: La frase ya está en el tema
+                status: 409
+                detail: El tema 8 ya tiene la frase わたしは学生です。 (frase-0081).
+                instance: /api/v1/frases/frase-0071
+    delete:
+      tags: [Frases]
+      operationId: borrarFrase
+      summary: Borra una frase en borrador
+      description: Solo los borradores se borran. Una frase publicada ya puede estar en el progreso de algún aprendiz.
+      security:
+        - editor: []
+      parameters:
+        - $ref: '#/components/parameters/FraseId'
+      responses:
+        '204':
+          description: La frase se borró.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La frase ya está publicada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+              example:
+                type: https://api.musubi.app/problemas/frase-publicada
+                title: La frase ya está publicada
+                status: 409
+                detail: frase-0071 se publicó en la versión 42 y no se puede borrar.
+                instance: /api/v1/frases/frase-0071
+
+  /lecturas:
+    get:
+      tags: [Lecturas]
+      operationId: listarLecturas
+      summary: Catálogo de lecturas
+      description: |
+        Un resumen de cada lectura, sin el texto, con lo que pesa. La aplicación elige cuáles
+        descargar según el nivel del aprendiz y el espacio libre.
+      parameters:
+        - name: nivel
+          in: query
+          schema:
+            $ref: '#/components/schemas/Nivel'
+        - name: q
+          in: query
+          description: Texto libre en el título.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Una página de lecturas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaLecturas'
+              example:
+                page: 1
+                size: 20
+                total: 1
+                items:
+                  - id: lectura-0012
+                    titulo: Mi escuela
+                    nivel: N5
+                    version: 42
+                    bytes: 2048
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    post:
+      tags: [Lecturas]
+      operationId: crearLectura
+      summary: Crea una lectura en borrador
+      security:
+        - editor: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lectura'
+            example:
+              titulo: Mi escuela
+              nivel: N5
+              texto: わたしは学生です。毎日、学校へ行きます。
+              traduccion: Soy estudiante. Todos los días voy a la escuela.
+              piezas: [vocab-1206900, vocab-1206730, kanji-5b66]
+      responses:
+        '201':
+          description: La lectura creada, en borrador.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lectura'
+              example:
+                id: lectura-0012
+                titulo: Mi escuela
+                nivel: N5
+                estado: borrador
+                texto: わたしは学生です。毎日、学校へ行きます。
+                traduccion: Soy estudiante. Todos los días voy a la escuela.
+                piezas: [vocab-1206900, vocab-1206730, kanji-5b66]
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /lecturas/{lecturaId}:
+    get:
+      tags: [Lecturas]
+      operationId: obtenerLectura
+      summary: Descarga una lectura
+      parameters:
+        - $ref: '#/components/parameters/LecturaId'
+      responses:
+        '200':
+          description: La lectura completa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lectura'
+              example:
+                id: lectura-0012
+                titulo: Mi escuela
+                nivel: N5
+                estado: publicada
+                version: 42
+                texto: わたしは学生です。毎日、学校へ行きます。
+                traduccion: Soy estudiante. Todos los días voy a la escuela.
+                piezas: [vocab-1206900, vocab-1206730, kanji-5b66]
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+    patch:
+      tags: [Lecturas]
+      operationId: modificarLectura
+      summary: Corrige o retira una lectura
+      description: |
+        Cambia solo los campos enviados. Con `estado: retirada`, la lectura deja de aparecer
+        en el catálogo.
+      security:
+        - editor: []
+      parameters:
+        - $ref: '#/components/parameters/LecturaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosLectura'
+            example:
+              traduccion: Soy estudiante. Voy a la escuela todos los días.
+      responses:
+        '200':
+          description: La lectura con los cambios, en borrador hasta la próxima publicación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lectura'
+              example:
+                id: lectura-0012
+                titulo: Mi escuela
+                nivel: N5
+                estado: borrador
+                version: 42
+                texto: わたしは学生です。毎日、学校へ行きます。
+                traduccion: Soy estudiante. Voy a la escuela todos los días.
+                piezas: [vocab-1206900, vocab-1206730, kanji-5b66]
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+
+components:
+  securitySchemes:
+    editor:
+      type: http
+      scheme: bearer
+      description: Token de una cuenta del equipo con rol de editor.
+
+  headers:
+    Location:
+      description: La URL del recurso creado.
+      schema:
+        type: string
+        format: uri
+
+  parameters:
+    PiezaId:
+      name: piezaId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^(kana|kanji)-[0-9a-f]{4,5}$|^vocab-(p-)?[0-9]+$|^gram-[a-z0-9-]+$'
+      example: kanji-5b66
+    FraseId:
+      name: fraseId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: frase-0071
+    LecturaId:
+      name: lecturaId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: lectura-0012
+    PaqueteId:
+      name: paqueteId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: ruta-tema-07
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    DemasiadasPeticiones:
+      description: Se superó el límite de peticiones de esta IP.
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar antes de reintentar.
+          schema:
+            type: integer
+          example: 30
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://api.musubi.app/problemas/demasiadas-peticiones
+            title: Demasiadas peticiones
+            status: 429
+            detail: Se superaron las 60 peticiones por minuto. Reintente en 30 segundos.
+    PeticionInvalida:
+      description: La petición no cumple el formato.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://api.musubi.app/problemas/peticion-invalida
+            title: La petición no es válida
+            status: 400
+            detail: 'size debe estar entre 1 y 100; llegó 500.'
+            instance: /api/v1/piezas
+    NoAutenticado:
+      description: Falta el token o no es válido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://api.musubi.app/problemas/no-autenticado
+            title: Falta autenticación
+            status: 401
+            detail: Esta operación requiere un token de editor.
+    SinPermiso:
+      description: El token no tiene rol de editor.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://api.musubi.app/problemas/sin-permiso
+            title: Sin permiso
+            status: 403
+            detail: La cuenta no tiene rol de editor.
+    NoEncontrado:
+      description: El recurso no existe.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+          example:
+            type: https://api.musubi.app/problemas/no-encontrado
+            title: No existe
+            status: 404
+            detail: No existe una pieza con el identificador kanji-9999.
+
+  schemas:
+    TipoPieza:
+      type: string
+      enum: [kana, kanji, vocabulario, gramatica]
+    EstadoPieza:
+      type: string
+      enum: [borrador, publicada, retirada, fusionada]
+    Nivel:
+      type: string
+      description: Nivel del JLPT al que corresponde la pieza.
+      enum: [N5, N4, N3, N2, N1]
+    TipoPaquete:
+      type: string
+      enum: [ruta, diccionario, trazos]
+
+    PiezaBase:
+      type: object
+      required: [id, tipo, forma]
+      properties:
+        id:
+          type: string
+          description: Identificador estable. Nunca se reutiliza.
+          example: kanji-5b66
+        tipo:
+          $ref: '#/components/schemas/TipoPieza'
+        estado:
+          allOf:
+            - $ref: '#/components/schemas/EstadoPieza'
+          readOnly: true
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        version:
+          type: integer
+          readOnly: true
+          description: Versión del contenido en la que la pieza cambió por última vez.
+          example: 42
+        reemplazadaPor:
+          type: string
+          readOnly: true
+          nullable: true
+          description: |
+            Si la pieza está fusionada, la pieza activa que la reemplaza. Siempre apunta a la
+            última de la cadena: si A se fusionó en B y B en C, la de A es C.
+        forma:
+          type: string
+          description: Cómo se escribe. En el vocabulario, la forma completa con sus kanji.
+          example: 学
+
+    Kana:
+      allOf:
+        - $ref: '#/components/schemas/PiezaBase'
+        - type: object
+          required: [romaji, silabario]
+          properties:
+            romaji:
+              type: string
+              example: a
+            silabario:
+              type: string
+              enum: [hiragana, katakana]
+
+    Kanji:
+      allOf:
+        - $ref: '#/components/schemas/PiezaBase'
+        - type: object
+          required: [significados, trazos]
+          properties:
+            onyomi:
+              type: array
+              items:
+                type: string
+              example: [ガク]
+            kunyomi:
+              type: array
+              items:
+                type: string
+              example: [まな.ぶ]
+            significados:
+              type: array
+              items:
+                type: string
+              example: [estudio, aprender]
+            trazos:
+              type: integer
+              minimum: 1
+              example: 8
+
+    Vocabulario:
+      allOf:
+        - $ref: '#/components/schemas/PiezaBase'
+        - type: object
+          required: [lecturas, significados]
+          properties:
+            lecturas:
+              type: array
+              items:
+                type: string
+              example: [がくせい]
+            significados:
+              type: array
+              items:
+                type: string
+              example: [estudiante]
+            kanji:
+              type: array
+              description: Identificadores de los kanji que trae la palabra.
+              items:
+                type: string
+              example: [kanji-5b66, kanji-751f]
+
+    Gramatica:
+      allOf:
+        - $ref: '#/components/schemas/PiezaBase'
+        - type: object
+          required: [patron, registro, explicacion]
+          properties:
+            patron:
+              type: string
+              description: Partes fijas, huecos entre corchetes y partes opcionales.
+              example: '[causa]。だから[consecuencia]'
+            registro:
+              type: string
+              enum: [cordial, informal, indiferente]
+              example: informal
+            explicacion:
+              type: string
+              example: Une una causa con su consecuencia. En registro cordial se usa ですから.
+
+    Pieza:
+      oneOf:
+        - $ref: '#/components/schemas/Kana'
+        - $ref: '#/components/schemas/Kanji'
+        - $ref: '#/components/schemas/Vocabulario'
+        - $ref: '#/components/schemas/Gramatica'
+      discriminator:
+        propertyName: tipo
+        mapping:
+          kana: '#/components/schemas/Kana'
+          kanji: '#/components/schemas/Kanji'
+          vocabulario: '#/components/schemas/Vocabulario'
+          gramatica: '#/components/schemas/Gramatica'
+
+    CambiosPieza:
+      description: |
+        Los campos que cambian; los demás quedan igual. `tipo` es obligatorio y debe ser el
+        de la pieza: no cambia, solo indica qué campos se aceptan. El identificador y la
+        forma no cambian.
+      oneOf:
+        - $ref: '#/components/schemas/CambiosKana'
+        - $ref: '#/components/schemas/CambiosKanji'
+        - $ref: '#/components/schemas/CambiosVocabulario'
+        - $ref: '#/components/schemas/CambiosGramatica'
+      discriminator:
+        propertyName: tipo
+        mapping:
+          kana: '#/components/schemas/CambiosKana'
+          kanji: '#/components/schemas/CambiosKanji'
+          vocabulario: '#/components/schemas/CambiosVocabulario'
+          gramatica: '#/components/schemas/CambiosGramatica'
+
+    NuevoEstado:
+      type: string
+      enum: [retirada, fusionada]
+      description: |
+        `retirada` saca la pieza de los paquetes nuevos. `fusionada` la marca como
+        duplicada de la pieza que indica `reemplazadaPor`.
+
+    CambiosKana:
+      type: object
+      required: [tipo]
+      additionalProperties: false
+      properties:
+        tipo:
+          type: string
+          enum: [kana]
+        estado:
+          $ref: '#/components/schemas/NuevoEstado'
+        reemplazadaPor:
+          type: string
+          description: Obligatorio si el estado es fusionada.
+        romaji:
+          type: string
+
+    CambiosKanji:
+      type: object
+      required: [tipo]
+      additionalProperties: false
+      properties:
+        tipo:
+          type: string
+          enum: [kanji]
+        estado:
+          $ref: '#/components/schemas/NuevoEstado'
+        reemplazadaPor:
+          type: string
+          description: Obligatorio si el estado es fusionada.
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        onyomi:
+          type: array
+          items:
+            type: string
+        kunyomi:
+          type: array
+          items:
+            type: string
+        significados:
+          type: array
+          items:
+            type: string
+        trazos:
+          type: integer
+          minimum: 1
+
+    CambiosVocabulario:
+      type: object
+      required: [tipo]
+      additionalProperties: false
+      properties:
+        tipo:
+          type: string
+          enum: [vocabulario]
+        estado:
+          $ref: '#/components/schemas/NuevoEstado'
+        reemplazadaPor:
+          type: string
+          description: Obligatorio si el estado es fusionada.
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        lecturas:
+          type: array
+          items:
+            type: string
+        significados:
+          type: array
+          items:
+            type: string
+        kanji:
+          type: array
+          items:
+            type: string
+
+    CambiosGramatica:
+      type: object
+      required: [tipo]
+      additionalProperties: false
+      properties:
+        tipo:
+          type: string
+          enum: [gramatica]
+        estado:
+          $ref: '#/components/schemas/NuevoEstado'
+        reemplazadaPor:
+          type: string
+          description: Obligatorio si el estado es fusionada.
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        patron:
+          type: string
+        explicacion:
+          type: string
+
+    PaginaPiezas:
+      type: object
+      required: [page, size, total, items]
+      properties:
+        page:
+          type: integer
+          example: 1
+        size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 2
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pieza'
+
+    Frase:
+      type: object
+      required: [texto, tema, piezas]
+      properties:
+        id:
+          type: string
+          readOnly: true
+          example: frase-0071
+        texto:
+          type: string
+          example: わたしは学生です。
+        traduccion:
+          type: string
+          example: Soy estudiante.
+        tema:
+          type: integer
+          minimum: 1
+          description: Orden del tema de la ruta.
+          example: 7
+        estado:
+          type: string
+          readOnly: true
+          enum: [borrador, publicada, retirada]
+        piezas:
+          type: array
+          minItems: 1
+          description: Identificadores de las piezas, en el orden en que aparecen.
+          items:
+            type: string
+          example: [vocab-1206900, kanji-5b66, gram-desu-cordial]
+
+    CambiosFrase:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        traduccion:
+          type: string
+        tema:
+          type: integer
+          minimum: 1
+        piezas:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        estado:
+          type: string
+          enum: [retirada]
+
+    PaginaFrases:
+      type: object
+      required: [page, size, total, items]
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Frase'
+
+    Lectura:
+      type: object
+      required: [titulo, nivel, texto, piezas]
+      properties:
+        id:
+          type: string
+          readOnly: true
+          example: lectura-0012
+        titulo:
+          type: string
+          example: Mi escuela
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        estado:
+          type: string
+          readOnly: true
+          enum: [borrador, publicada, retirada]
+        version:
+          type: integer
+          readOnly: true
+        texto:
+          type: string
+          example: わたしは学生です。毎日、学校へ行きます。
+        traduccion:
+          type: string
+        piezas:
+          type: array
+          description: Las piezas que la lectura pone en juego.
+          items:
+            type: string
+
+    ResumenLectura:
+      type: object
+      required: [id, titulo, nivel, version, bytes]
+      properties:
+        id:
+          type: string
+        titulo:
+          type: string
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        version:
+          type: integer
+        bytes:
+          type: integer
+          description: Lo que pesa la descarga.
+
+    PaginaLecturas:
+      type: object
+      required: [page, size, total, items]
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumenLectura'
+
+    CambiosLectura:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        titulo:
+          type: string
+        nivel:
+          $ref: '#/components/schemas/Nivel'
+        texto:
+          type: string
+        traduccion:
+          type: string
+        piezas:
+          type: array
+          items:
+            type: string
+        estado:
+          type: string
+          enum: [retirada]
+
+    Tema:
+      type: object
+      required: [orden, titulo, paquete]
+      properties:
+        orden:
+          type: integer
+          example: 7
+        titulo:
+          type: string
+          example: Presentarse
+        paquete:
+          type: string
+          example: ruta-tema-07
+        frases:
+          type: integer
+          description: Cuántas frases tiene.
+          example: 12
+
+    ResumenPaquete:
+      type: object
+      required: [id, tipo, version, bytes, sha256]
+      properties:
+        id:
+          type: string
+          example: ruta-tema-07
+        tipo:
+          $ref: '#/components/schemas/TipoPaquete'
+        version:
+          type: integer
+          example: 42
+        bytes:
+          type: integer
+          description: Tamaño de la descarga.
+          example: 18432
+        sha256:
+          type: string
+          description: Huella del contenido, para verificar la descarga.
+
+    Manifiesto:
+      type: object
+      required: [versionContenido, paquetes]
+      properties:
+        versionContenido:
+          type: integer
+          example: 42
+        paquetes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumenPaquete'
+
+    Paquete:
+      type: object
+      required: [id, tipo, version]
+      properties:
+        id:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoPaquete'
+        version:
+          type: integer
+        piezas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pieza'
+        frases:
+          type: array
+          items:
+            $ref: '#/components/schemas/Frase'
+
+
+    VersionNueva:
+      type: object
+      required: [notas]
+      properties:
+        notas:
+          type: string
+          description: Qué trae la versión.
+          example: Tema 7 completo y corrección de 学.
+
+    Version:
+      type: object
+      required: [numero, publicadaEn, cambios]
+      properties:
+        numero:
+          type: integer
+          example: 42
+        publicadaEn:
+          type: string
+          format: date-time
+        notas:
+          type: string
+        cambios:
+          type: object
+          required: [creadas, modificadas, retiradas, fusionadas]
+          properties:
+            creadas:
+              type: array
+              items:
+                type: string
+            modificadas:
+              type: array
+              items:
+                type: string
+            retiradas:
+              type: array
+              items:
+                type: string
+            fusionadas:
+              type: array
+              description: En el orden en que la aplicación debe aplicarlas.
+              items:
+                type: object
+                required: [origen, destino]
+                properties:
+                  origen:
+                    type: string
+                  destino:
+                    type: string
+
+    Problema:
+      type: object
+      description: Formato único de error (Problem Details, RFC 9457).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Identifica el tipo de problema.
+          example: https://api.musubi.app/problemas/pieza-fusionada
+        title:
+          type: string
+          description: Resumen del tipo de problema, igual para todos sus casos.
+          example: La pieza ya fue fusionada
+        status:
+          type: integer
+          description: El código HTTP.
+          example: 409
+        detail:
+          type: string
+          description: Explicación de este caso.
+          example: vocab-p-0007 ya se fusionó en vocab-1555480 en la versión 42. Una fusión no se deshace.
+        instance:
+          type: string
+          description: La ruta de la petición que falló.
+          example: /api/v1/piezas/vocab-p-0007
